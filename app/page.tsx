@@ -10,10 +10,12 @@ export default function Home() {
     "en productos útiles",
     "en negocios sostenibles",
     "en inversiones rentables",
-    "en mejorar el mundo",
     "en objetivos claros",
     "en proyectos realistas",
     "en mejorar la vida",
+    "en soluciones honestas",
+    "en valor auténtico",
+    "en trabajo con propósito",
   ];
 
   const [currentPhrase, setCurrentPhrase] = useState("");
