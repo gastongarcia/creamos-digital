@@ -85,9 +85,10 @@ export default function Home() {
             </p>
 
             <p className="text-xl md:text-2xl mb-6">
-              Dirigida por Gastón García Oreamuno, nuestra trayectoria incluye
+              Dirigida por Gastón García, nuestra trayectoria incluye
               colaboraciones con marcas como Movistar, Uber, Trident, Halls,
-              Mitsubishi y Mercedes-Benz. También desarrollamos sitios web para
+              Mitsubishi y Mercedes-Benz desde roles de dirección tecnológica en
+              equipos multidisciplinarios. También desarrollamos sitios web para
               pequeñas y medianas empresas en Costa Rica y lideramos proyectos
               de activismo digital.
             </p>
@@ -95,7 +96,8 @@ export default function Home() {
               Nuestro enfoque es selectivo: preferimos pocos proyectos bien
               ejecutados a muchos mal atendidos. Trabajamos con equipos
               pequeños, garantizando atención personalizada y resultados de
-              calidad.
+              calidad. Actualmente dirigimos proyectos web para compañías en
+              toda Latinoamérica.
             </p>
           </section>
 
