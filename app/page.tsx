@@ -77,28 +77,31 @@ export default function Home() {
         <main className="space-y-12">
           <section className="border-b-2 border-black pb-8">
             <p className="text-xl md:text-2xl mb-6">
-              Soy Gastón García, consultor, diseñador y desarrollador web con
-              más de 20 años de experiencia. Me especializo en transformar ideas
-              en proyectos digitales funcionales y sostenibles. No improviso:
-              planifico cada detalle para evitar desperdicio de tiempo, dinero y
+              CREAMOS DIGITAL es una consultora especializada en proyectos web
+              con más de 20 años de experiencia. Transformamos ideas en
+              proyectos digitales funcionales y sostenibles mediante
+              planificación meticulosa, evitando desperdicio de tiempo, dinero y
               energía.
             </p>
 
             <p className="text-xl md:text-2xl mb-6">
-              He trabajado con marcas globales como Movistar, Uber, Trident,
-              Halls, Mitsubishi y Mercedes-Benz y Legrand. También he
-              desarrollado sitios web para pequeñas y medianas empresas en Costa
-              Rica y liderado proyectos de activismo digital.
+              Dirigida por Gastón García Oreamuno, nuestra trayectoria incluye
+              colaboraciones con marcas como Movistar, Uber, Trident, Halls,
+              Mitsubishi y Mercedes-Benz. También desarrollamos sitios web para
+              pequeñas y medianas empresas en Costa Rica y lideramos proyectos
+              de activismo digital.
             </p>
             <p className="text-xl md:text-2xl">
-              Mi enfoque es claro: soluciones bien pensadas, ejecuciones
-              precisas y resultados reales.
+              Nuestro enfoque es selectivo: preferimos pocos proyectos bien
+              ejecutados a muchos mal atendidos. Trabajamos con equipos
+              pequeños, garantizando atención personalizada y resultados de
+              calidad.
             </p>
           </section>
 
           <section className="border-b-2 border-black pb-8">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Si buscas ayuda con tu proyecto digital
+              Si buscas ayuda profesional con tu proyecto digital
             </h2>
 
             <ul className="space-y-3 text-xl">
@@ -133,30 +136,31 @@ export default function Home() {
 
           <section className="border-b-2 border-black pb-8">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Pero antes de escribirme…
+              Nuestro enfoque es selectivo
             </h2>
 
-            <p className="text-xl mb-4">No me escribas si:</p>
+            <p className="text-xl mb-4">No trabajamos con clientes que:</p>
 
             <ul className="space-y-3 text-xl">
               <li className="flex items-start">
                 <span className="mr-2 text-2xl">❌</span>
-                <span>No tienes idea de lo que quieres lograr</span>
+                <span>No tienen idea de lo que quieren lograr</span>
               </li>
               <li className="flex items-start">
                 <span className="mr-2 text-2xl">❌</span>
-                <span>No valoras el proceso de planificación</span>
+                <span>No valoran el proceso de planificación</span>
               </li>
               <li className="flex items-start">
                 <span className="mr-2 text-2xl">❌</span>
-                <span>No sigues recomendaciones estratégicas</span>
+                <span>No siguen recomendaciones estratégicas</span>
               </li>
             </ul>
           </section>
 
           <section className="text-center py-8">
             <p className="text-xl mb-6">
-              Si tu proyecto calza con mi enfoque, llena este formulario:
+              Si tu proyecto se alinea con nuestra filosofía, completa este
+              formulario:
             </p>
 
             <Link
