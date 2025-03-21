@@ -77,27 +77,25 @@ export default function Home() {
         <main className="space-y-12">
           <section className="border-b-2 border-black pb-8">
             <p className="text-xl md:text-2xl mb-6">
-              CREAMOS DIGITAL es una consultora especializada en proyectos web
-              con más de 20 años de experiencia. Transformamos ideas en
-              proyectos digitales funcionales y sostenibles mediante
-              planificación meticulosa, evitando desperdicio de tiempo, dinero y
-              energía.
+              Transformamos ideas en proyectos web funcionales y sostenibles
+              desde hace más de dos décadas. Nuestra metodología se basa en la
+              planificación rigurosa y la optimización de recursos, evitando el
+              desperdicio habitual en el desarrollo digital.
             </p>
 
             <p className="text-xl md:text-2xl mb-6">
-              Dirigida por Gastón García, nuestra trayectoria incluye
-              colaboraciones con marcas como Movistar, Uber, Trident, Halls,
-              Mitsubishi y Mercedes-Benz desde roles de dirección tecnológica en
-              equipos multidisciplinarios. También desarrollamos sitios web para
-              pequeñas y medianas empresas en Costa Rica y lideramos proyectos
-              de activismo digital.
+              Bajo la dirección de Gastón García, hemos liderado iniciativas
+              tecnológicas para organizaciones como Movistar, Uber y
+              Mercedes-Benz, alternando entre la dirección de equipos
+              multidisciplinarios y el desarrollo especializado para empresas en
+              Costa Rica y todo Centroamérica.
             </p>
             <p className="text-xl md:text-2xl">
-              Nuestro enfoque es selectivo: preferimos pocos proyectos bien
-              ejecutados a muchos mal atendidos. Trabajamos con equipos
-              pequeños, garantizando atención personalizada y resultados de
-              calidad. Actualmente dirigimos proyectos web para compañías en
-              toda Latinoamérica.
+              Trabajamos de forma deliberadamente selectiva. La atención
+              concentrada en pocos proyectos nos permite mantener estándares de
+              calidad consistentes. Actualmente dirigimos proyectos para
+              compañías en toda Latinoamérica, manteniendo equipos reducidos y
+              comunicación directa.
             </p>
           </section>
 
