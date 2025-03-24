@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import HamburgerMenu from "./components/HamburgerMenu";
 
 export default function Home() {
   const phrases = [
@@ -56,14 +57,25 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [currentPhrase, delta, isDeleting, phraseIndex, phrases]);
 
+  const homeNavLinks = [
+    { href: "/", label: "Inicio" },
+    { href: "/articulos", label: "Artículos" },
+    { href: "https://tally.so/r/w8Robl", label: "Contacto" },
+  ];
+
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-12">
       <div className="max-w-4xl mx-auto">
         {/* Hero Section */}
         <header className="py-16 md:py-24 border-b-4 border-black mb-12">
-          <h1 className="text-7xl md:text-9xl font-bold tracking-tighter uppercase mb-4">
-            Creamos
-          </h1>
+          <div className="flex justify-between items-start mb-8">
+            <h1 className="text-7xl md:text-9xl font-bold tracking-tighter uppercase">
+              Creamos
+            </h1>
+            <nav className="pt-2">
+              <HamburgerMenu links={homeNavLinks} />
+            </nav>
+          </div>
 
           <div className="h-12 flex items-center">
             <span className="text-2xl md:text-3xl font-normal inline-block">

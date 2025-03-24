@@ -1,3 +1,56 @@
+# Creamos Digital Website
+
+Sitio web corporativo de Creamos Digital, una consultora web con enfoque brutalista.
+
+## Estructura del Sitio
+
+- **Home:** Página principal con información de servicios
+- **Artículos:** Blog con artículos sobre tecnología, marketing e IA
+
+## Sistema de Blog
+
+### Cómo agregar nuevos artículos
+
+1. Crea un archivo markdown en la carpeta `public/articulos/` con el nombre deseado (ej: `mi-nuevo-articulo.md`).
+2. Agrega el frontmatter al inicio del archivo:
+
+```markdown
+---
+title: "Título del artículo"
+date: "YYYY-MM-DD"
+description: "Breve descripción para SEO"
+---
+```
+
+3. Escribe el contenido del artículo en formato markdown.
+4. El artículo aparecerá automáticamente en la página de artículos.
+
+### Formato de Markdown
+
+El blog soporta los siguientes elementos de markdown:
+
+- Encabezados (# H1, ## H2, ### H3)
+- Párrafos
+- Listas ordenadas y desordenadas
+- Enlaces
+- Texto en negrita e itálica
+- Bloques de cita
+- Líneas horizontales
+
+### Ruta de los artículos
+
+- Listado de artículos: `/articulos`
+- Artículo individual: `/articulos/[nombre-del-archivo]`
+
+## Tecnologías
+
+- Next.js (App Router)
+- React
+- TypeScript
+- Tailwind CSS
+- Gray Matter (para parsear frontmatter)
+- Next MDX Remote (para renderizar markdown)
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
