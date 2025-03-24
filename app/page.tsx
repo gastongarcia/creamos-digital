@@ -69,10 +69,10 @@ export default function Home() {
         {/* Hero Section */}
         <header className="py-16 md:py-24 border-b-4 border-black mb-12">
           <div className="flex justify-between items-start mb-8">
-            <h1 className="text-7xl md:text-9xl font-bold tracking-tighter uppercase">
+            <h1 className="text-7xl md:text-9xl font-bold tracking-tighter uppercase max-w-[80%]">
               Creamos
             </h1>
-            <nav className="pt-2">
+            <nav className="pt-2 ml-4">
               <HamburgerMenu links={homeNavLinks} />
             </nav>
           </div>
