@@ -11,6 +11,8 @@ language: "es"
 
 En las últimas semanas, he estado investigando cómo los sistemas de inteligencia artificial como ChatGPT, Claude y otros asistentes de IA interactúan con la información de marca y marketing. Lo que he descubierto contradice directamente mucho de lo que los "expertos" en IA y los YouTubers están promoviendo. Esta publicación resume lo que he aprendido directamente de Claude (un asistente de IA de Anthropic) sobre las limitaciones fundamentales de estos sistemas y lo que significa para nuestras estrategias de marketing digital.
 
+![IA con los ojos vendados representando la limitación de los sistemas de IA](/images/ai-blinded.webp)
+
 ## La Verdad Incómoda: La IA No Aprende Automáticamente de Tu Contenido Nuevo
 
 La revelación más importante que deben entender es esta: **los sistemas de IA actuales no actualizan automáticamente su conocimiento base con el nuevo contenido que publicas en línea**.

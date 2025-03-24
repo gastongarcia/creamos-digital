@@ -146,6 +146,14 @@ function markdownToHtml(markdown) {
     line = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
     // Italic
     line = line.replace(/\*(.*?)\*/g, "<em>$1</em>");
+    // Images
+    if (line.match(/^!\[(.*?)\]\((.*?)\)$/)) {
+      const imageMatch = line.match(/^!\[(.*?)\]\((.*?)\)$/);
+      const alt = imageMatch[1];
+      const src = imageMatch[2];
+      html += `<div class="my-8"><img src="${src}" alt="${alt}" class="mx-auto border-2 border-black max-w-full" /></div>\n`;
+      continue;
+    }
     // Links
     line = line.replace(
       /\[(.*?)\]\((.*?)\)/g,

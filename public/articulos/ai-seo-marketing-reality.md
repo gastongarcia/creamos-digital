@@ -11,6 +11,8 @@ language: "en"
 
 Over the past few weeks, I've been researching how artificial intelligence systems like ChatGPT, Claude, and other AI assistants interact with brand and marketing information. What I've discovered directly contradicts much of what AI "experts" and YouTubers are promoting. This post summarizes what I've learned directly from Claude (an AI assistant from Anthropic) about the fundamental limitations of these systems and what it means for our digital marketing strategies.
 
+![AI with a blindfold representing the limitations of AI systems](/images/ai-blinded.webp)
+
 ## The Uncomfortable Truth: AI Doesn't Automatically Learn From Your New Content
 
 The most important revelation you need to understand is this: **current AI systems do not automatically update their knowledge base with new content you publish online**.
