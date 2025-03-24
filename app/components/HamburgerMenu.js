@@ -3,16 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 
-interface NavLink {
-  href: string;
-  label: string;
-}
-
-interface HamburgerMenuProps {
-  links: NavLink[];
-}
-
-export default function HamburgerMenu({ links }: HamburgerMenuProps) {
+export default function HamburgerMenu({ links }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const toggleMenu = () => {

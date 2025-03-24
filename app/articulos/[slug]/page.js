@@ -6,7 +6,7 @@ import matter from "gray-matter";
 import HamburgerMenu from "../../components/HamburgerMenu";
 
 // Function to get article data for metadata
-function getArticleData(slug: string) {
+function getArticleData(slug) {
   try {
     const articlePath = path.join(
       process.cwd(),
@@ -38,7 +38,7 @@ function getArticleData(slug: string) {
 }
 
 // Simple language detection function
-function detectLanguage(text: string): string {
+function detectLanguage(text) {
   // Common Spanish words/patterns
   const spanishPatterns = [
     "la",
@@ -92,7 +92,7 @@ function detectLanguage(text: string): string {
 }
 
 // Get navigation text based on language
-function getNavText(language: string) {
+function getNavText(language) {
   return {
     home: language === "es" ? "Inicio" : "Home",
     articles: language === "es" ? "Artículos" : "Articles",
@@ -100,11 +100,7 @@ function getNavText(language: string) {
 }
 
 // Dynamic metadata
-export function generateMetadata({
-  params,
-}: {
-  params: { slug: string };
-}): Metadata {
+export function generateMetadata({ params }) {
   const slug = params.slug || "unknown";
   const articleData = getArticleData(slug);
 
@@ -115,7 +111,7 @@ export function generateMetadata({
 }
 
 // Very basic markdown to HTML converter
-function markdownToHtml(markdown: string): string {
+function markdownToHtml(markdown) {
   // Split into lines
   const lines = markdown.split("\n");
   let html = "";
@@ -219,7 +215,7 @@ function markdownToHtml(markdown: string): string {
 }
 
 // Get date format based on language
-function formatDate(date: Date, language: string): string {
+function formatDate(date, language) {
   return date.toLocaleDateString(language === "es" ? "es-ES" : "en-US", {
     year: "numeric",
     month: "long",
@@ -228,7 +224,7 @@ function formatDate(date: Date, language: string): string {
 }
 
 // Simplified article page
-export default function ArticlePage({ params }: { params: { slug: string } }) {
+export default function ArticlePage({ params }) {
   const slug = params.slug || "unknown";
   let title = slug;
   let date = null;

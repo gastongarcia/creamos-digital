@@ -5,23 +5,15 @@ import Link from "next/link";
 import { Metadata } from "next";
 import HamburgerMenu from "../components/HamburgerMenu";
 
-// Interface for article metadata
-interface ArticleMetadata {
-  slug: string;
-  title: string;
-  date?: string;
-  language?: string;
-}
-
 // Metadata for the page
-export const metadata: Metadata = {
+export const metadata = {
   title: "Artículos | Creamos Digital",
   description:
     "Artículos sobre desarrollo web, marketing digital, estrategias de contenido e inteligencia artificial.",
 };
 
 // Simple language detection function
-function detectLanguage(text: string): string {
+function detectLanguage(text) {
   // Common Spanish words/patterns
   const spanishPatterns = [
     "la",
@@ -75,7 +67,7 @@ function detectLanguage(text: string): string {
 }
 
 // Function to get all articles
-function getAllArticles(): ArticleMetadata[] {
+function getAllArticles() {
   const articlesDirectory = path.join(process.cwd(), "public/articulos");
 
   // Check if directory exists first
@@ -116,19 +108,19 @@ function getAllArticles(): ArticleMetadata[] {
 }
 
 // Extract title from markdown content if no frontmatter
-function extractTitleFromContent(content: string): string {
+function extractTitleFromContent(content) {
   // Look for the first heading (# Title)
   const titleMatch = content.match(/^#\s+(.+)$/m);
   return titleMatch ? titleMatch[1] : "Sin título";
 }
 
 // Get button text based on language
-function getButtonText(language: string): string {
+function getButtonText(language) {
   return language === "es" ? "Leer artículo →" : "Read article →";
 }
 
 // Get date format based on language
-function formatDate(date: Date, language: string): string {
+function formatDate(date, language) {
   return date.toLocaleDateString(language === "es" ? "es-ES" : "en-US", {
     year: "numeric",
     month: "long",
