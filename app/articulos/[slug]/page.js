@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Metadata } from "next";
+// Remove direct import from 'next'
+// import { Metadata } from "next";
 import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
@@ -100,8 +101,10 @@ function getNavText(language) {
 }
 
 // Dynamic metadata
-export function generateMetadata({ params }) {
-  const slug = params.slug || "unknown";
+export async function generateMetadata({ params }) {
+  // Await the params object to properly access dynamic route parameters
+  const resolvedParams = await params;
+  const slug = resolvedParams.slug || "unknown";
   const articleData = getArticleData(slug);
 
   return {
@@ -120,18 +123,32 @@ function markdownToHtml(markdown) {
   let inBlockquote = false;
   let foundFirstHeading = false;
 
+  // Group lines for list processing
+  let currentOrderedList = [];
+  let processingOrderedList = false;
+
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trim();
+
+    // End of ordered list detection
+    if (processingOrderedList && (!line || !/^\d+\.\s/.test(line))) {
+      // Process the collected ordered list
+      if (currentOrderedList.length > 0) {
+        html += '<ol class="list-decimal pl-6 space-y-2 mb-4">\n';
+        currentOrderedList.forEach((item, index) => {
+          html += `<li>${item}</li>\n`;
+        });
+        html += "</ol>\n";
+        currentOrderedList = [];
+      }
+      processingOrderedList = false;
+    }
 
     // Skip empty lines
     if (!line) {
       if (inList) {
         html += "</ul>\n";
         inList = false;
-      }
-      if (inOrderedList) {
-        html += "</ol>\n";
-        inOrderedList = false;
       }
       if (inBlockquote) {
         html += "</blockquote>\n";
@@ -188,13 +205,10 @@ function markdownToHtml(markdown) {
       }
       html += `<p class="mb-2">${line.substring(2)}</p>\n`;
     }
-    // Ordered list items
+    // Ordered list items - collect but don't render yet
     else if (/^\d+\.\s/.test(line)) {
-      if (!inOrderedList) {
-        html += '<ol class="list-decimal pl-6 space-y-2 mb-4">\n';
-        inOrderedList = true;
-      }
-      html += `<li>${line.replace(/^\d+\.\s/, "")}</li>\n`;
+      processingOrderedList = true;
+      currentOrderedList.push(line.replace(/^\d+\.\s/, ""));
     }
     // Unordered list items
     else if (line.startsWith("- ")) {
@@ -214,9 +228,17 @@ function markdownToHtml(markdown) {
     }
   }
 
+  // Handle any remaining list
+  if (currentOrderedList.length > 0) {
+    html += '<ol class="list-decimal pl-6 space-y-2 mb-4">\n';
+    currentOrderedList.forEach((item, index) => {
+      html += `<li>${item}</li>\n`;
+    });
+    html += "</ol>\n";
+  }
+
   // Close any open tags
   if (inList) html += "</ul>\n";
-  if (inOrderedList) html += "</ol>\n";
   if (inBlockquote) html += "</blockquote>\n";
 
   return html;
@@ -232,8 +254,10 @@ function formatDate(date, language) {
 }
 
 // Simplified article page
-export default function ArticlePage({ params }) {
-  const slug = params.slug || "unknown";
+export default async function ArticlePage({ params }) {
+  // Await the params object to properly access dynamic route parameters
+  const resolvedParams = await params;
+  const slug = resolvedParams.slug || "unknown";
   let title = slug;
   let date = null;
   let htmlContent = "<p>Content not available</p>";
@@ -286,7 +310,9 @@ export default function ArticlePage({ params }) {
         <main>
           <article className="space-y-6">
             {date && (
-              <div className="text-xl mb-8">{formatDate(date, language)}</div>
+              <div className="text-xl mb-8 md:mb-4">
+                {formatDate(date, language)}
+              </div>
             )}
             <div
               className="article-content text-xl"
