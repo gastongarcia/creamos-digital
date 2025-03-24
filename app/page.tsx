@@ -118,27 +118,27 @@ export default function Home() {
 
             <ul className="space-y-3 text-xl">
               <li className="flex items-start">
-                <span className="mr-2 text-2xl">✔️</span>
+                <span className="mr-2 text-2xl font-bold">✓</span>
                 <span>Auditoría y análisis de un sitio web existente</span>
               </li>
               <li className="flex items-start">
-                <span className="mr-2 text-2xl">✔️</span>
+                <span className="mr-2 text-2xl font-bold">✓</span>
                 <span>
                   Planificación y estrategia antes de lanzar un nuevo proyecto
                 </span>
               </li>
               <li className="flex items-start">
-                <span className="mr-2 text-2xl">✔️</span>
+                <span className="mr-2 text-2xl font-bold">✓</span>
                 <span>Optimización y mejora de sitios web con tu equipo</span>
               </li>
               <li className="flex items-start">
-                <span className="mr-2 text-2xl">✔️</span>
+                <span className="mr-2 text-2xl font-bold">✓</span>
                 <span>
                   Capacitación en desarrollo web para equipos internos
                 </span>
               </li>
               <li className="flex items-start">
-                <span className="mr-2 text-2xl">✔️</span>
+                <span className="mr-2 text-2xl font-bold">✓</span>
                 <span>
                   Desarrollo eficiente con IA y herramientas de automatización
                 </span>
@@ -155,15 +155,15 @@ export default function Home() {
 
             <ul className="space-y-3 text-xl">
               <li className="flex items-start">
-                <span className="mr-2 text-2xl">❌</span>
+                <span className="mr-2 text-2xl font-bold">✕</span>
                 <span>No tienen idea de lo que quieren lograr</span>
               </li>
               <li className="flex items-start">
-                <span className="mr-2 text-2xl">❌</span>
+                <span className="mr-2 text-2xl font-bold">✕</span>
                 <span>No valoran el proceso de planificación</span>
               </li>
               <li className="flex items-start">
-                <span className="mr-2 text-2xl">❌</span>
+                <span className="mr-2 text-2xl font-bold">✕</span>
                 <span>No siguen recomendaciones estratégicas</span>
               </li>
             </ul>
@@ -181,7 +181,7 @@ export default function Home() {
               rel="noopener noreferrer"
               className="inline-block px-8 py-4 border-4 border-black text-black hover:bg-black hover:text-white transition-colors duration-300 text-xl font-bold"
             >
-              👉 CONTACTO
+              CONTACTO
             </Link>
           </section>
         </main>
