@@ -154,7 +154,11 @@ function markdownToHtml(markdown) {
         html += "</blockquote>\n";
         inBlockquote = false;
       }
-      html += "<br/>\n";
+
+      // Only add <br> if there's already content (prevents multiple breaks at the start)
+      if (html.trim().length > 0) {
+        html += "<br/>\n";
+      }
       continue;
     }
 
@@ -220,11 +224,22 @@ function markdownToHtml(markdown) {
     }
     // Horizontal rule
     else if (line === "---") {
-      html += '<hr class="border-t-2 border-black my-10" />\n';
+      html += '<hr class="border-t-2 border-black my-4" />\n';
     }
     // Regular paragraph
     else {
-      html += `<p class="mb-4">${line}</p>\n`;
+      // Check if it's a "Last updated" line in any language or format
+      const lowerLine = line.toLowerCase();
+      if (
+        lowerLine.includes("last updated") ||
+        lowerLine.includes("última actualización") ||
+        lowerLine.includes("actualizado") ||
+        lowerLine.includes("updated")
+      ) {
+        html += `<p class="mt-2 mb-2 italic">${line.replace(/_/g, "")}</p>\n`;
+      } else {
+        html += `<p class="mb-4">${line}</p>\n`;
+      }
     }
   }
 
@@ -308,11 +323,9 @@ export default async function ArticlePage({ params }) {
         </header>
 
         <main>
-          <article className="space-y-6">
+          <article className="space-y-4">
             {date && (
-              <div className="text-xl mb-8 md:mb-4">
-                {formatDate(date, language)}
-              </div>
+              <div className="text-xl mb-2">{formatDate(date, language)}</div>
             )}
             <div
               className="article-content text-xl"
@@ -321,7 +334,7 @@ export default async function ArticlePage({ params }) {
           </article>
         </main>
 
-        <footer className="py-12 mt-16 border-t-2 border-black text-center">
+        <footer className="py-12 mt-6 border-t-2 border-black text-center">
           <p className="text-xl">
             <Link href="/" className="hover:underline">
               Creamos Digital
