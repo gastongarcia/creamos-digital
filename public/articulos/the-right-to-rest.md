@@ -2,7 +2,7 @@
 
 _Last updated: March 2024_
 
-Imagine a world where ignoring hunger was seen as a virtue, where feeling thirsty indicated moral weakness, and the need to use the bathroom revealed poor work ethics. Absurd, isn't it? Yet that's exactly what we do with another equally fundamental biological need: daytime rest.
+Imagine a world where ignoring hunger was seen as a virtue, where feeling thirsty indicated moral weakness, and the need to use the bathroom revealed a poor work ethic. Absurd, isn't it? Yet that's exactly what we do with another equally fundamental biological need: daytime rest.
 
 ## The Unnatural State of Perpetual Alertness
 

@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
 import Link from "next/link";
-import { Metadata } from "next";
 import HamburgerMenu from "../components/HamburgerMenu";
+import navigationLinks from "../components/navigationLinks";
 
 // Metadata for the page
 export const metadata = {
@@ -131,21 +131,22 @@ function formatDate(date, language) {
 export default function ArticlesPage() {
   const articles = getAllArticles();
 
-  const articlesPageLinks = [
-    { href: "/", label: "Inicio" },
-    { href: "/articulos", label: "Artículos" },
-  ];
-
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-12">
       <div className="max-w-4xl mx-auto">
         <header className="py-16 md:py-20 border-b-4 border-black mb-12">
+          <Link
+            href="/"
+            className="inline-block text-xl md:text-2xl font-bold uppercase tracking-tight mb-8 hover:underline"
+          >
+            Creamos Digital
+          </Link>
           <div className="flex justify-between items-start mb-8">
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter uppercase">
               Artículos
             </h1>
             <nav className="pt-2">
-              <HamburgerMenu links={articlesPageLinks} />
+              <HamburgerMenu links={navigationLinks} />
             </nav>
           </div>
         </header>

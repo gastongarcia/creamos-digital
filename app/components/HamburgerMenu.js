@@ -31,6 +31,8 @@ export default function HamburgerMenu({ links }) {
               <li key={index}>
                 <Link
                   href={link.href}
+                  target={link.external ? "_blank" : undefined}
+                  rel={link.external ? "noopener noreferrer" : undefined}
                   className="block px-4 py-2 hover:bg-black hover:text-white transition-colors"
                   onClick={() => setIsOpen(false)}
                 >

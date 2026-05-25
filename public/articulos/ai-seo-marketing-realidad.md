@@ -48,7 +48,7 @@ Algunas corporaciones importantes están estableciendo relaciones directas con O
 - Equipos técnicos dedicados
 - Tiempo sustancial de liderazgo
 
-Esta opción está típicamente fuera del alcance de todas excepto las empresas más grandes.
+Esta opción está típicamente fuera del alcance de todas las empresas, excepto las más grandes.
 
 ### 2. Crear Tu Propio Asistente de IA para Tu Empresa (Costo Medio-Alto)
 

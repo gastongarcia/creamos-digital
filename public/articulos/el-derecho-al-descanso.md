@@ -36,7 +36,7 @@ No es opinión: es ciencia. Un estudio de la NASA encontró que una siesta de 26
 
 No son beneficios marginales. Son transformadores. Y tocan justo las funciones más valoradas hoy: creatividad, claridad mental, inteligencia emocional, juicio estratégico.
 
-El descanso no es lo opuesto a la productividad. Es su prerequisito.
+El descanso no es lo opuesto a la productividad. Es su prerrequisito.
 
 Lo que pocos reconocen es que el trabajo constante genera una adicción neurológica real. Cada notificación respondida, cada tarea completada, cada reconocimiento: todos liberan pequeñas dosis de dopamina que nuestro cerebro ansía cada vez más. No es diferente a otras dependencias. Por eso sentimos ansiedad al desconectarnos, por eso revisamos compulsivamente el email en vacaciones, por eso nos definimos por lo que producimos. Hemos desarrollado una relación química con el trabajo que ninguna charla inspiracional sobre "balance" puede romper sin reconocer su naturaleza adictiva.
 

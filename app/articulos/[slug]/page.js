@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
 import HamburgerMenu from "../../components/HamburgerMenu";
+import navigationLinks from "../../components/navigationLinks";
 
 // Function to get article data for metadata
 function getArticleData(slug) {
@@ -17,13 +18,14 @@ function getArticleData(slug) {
     if (fs.existsSync(articlePath)) {
       const fileContent = fs.readFileSync(articlePath, "utf8");
       const { data } = matter(fileContent);
+      const title = data.title || extractTitleFromContent(fileContent) || slug;
 
       // Detect language from title if not specified in frontmatter
-      const language = data.language || detectLanguage(data.title || slug);
+      const language = data.language || detectLanguage(title);
 
       return {
-        title: data.title || slug,
-        description: data.description || `Artículo: ${data.title || slug}`,
+        title,
+        description: data.description || `Artículo: ${title}`,
         language,
       };
     }
@@ -36,6 +38,12 @@ function getArticleData(slug) {
     description: "Artículo en Creamos Digital",
     language: "es",
   };
+}
+
+// Extract title from markdown content if no frontmatter exists
+function extractTitleFromContent(content) {
+  const titleMatch = content.match(/^#\s+(.+)$/m);
+  return titleMatch ? titleMatch[1] : "";
 }
 
 // Simple language detection function
@@ -90,14 +98,6 @@ function detectLanguage(text) {
   });
 
   return spanishMatches > englishMatches ? "es" : "en";
-}
-
-// Get navigation text based on language
-function getNavText(language) {
-  return {
-    home: language === "es" ? "Inicio" : "Home",
-    articles: language === "es" ? "Artículos" : "Articles",
-  };
 }
 
 // Dynamic metadata
@@ -288,7 +288,7 @@ export default async function ArticlePage({ params }) {
     if (fs.existsSync(articlePath)) {
       const fileContent = fs.readFileSync(articlePath, "utf8");
       const { data, content } = matter(fileContent);
-      title = data.title || title;
+      title = data.title || extractTitleFromContent(content) || title;
       date = data.date ? new Date(data.date) : null;
 
       // Detect language from title if not specified in frontmatter
@@ -301,23 +301,22 @@ export default async function ArticlePage({ params }) {
     // Silently continue with defaults if any error occurs
   }
 
-  const navText = getNavText(language);
-
-  const articleNavLinks = [
-    { href: "/", label: navText.home },
-    { href: "/articulos", label: navText.articles },
-  ];
-
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-12">
       <div className="max-w-4xl mx-auto">
         <header className="py-16 md:py-20 border-b-4 border-black mb-12">
+          <Link
+            href="/"
+            className="inline-block text-xl md:text-2xl font-bold uppercase tracking-tight mb-8 hover:underline"
+          >
+            Creamos Digital
+          </Link>
           <div className="flex justify-between items-start">
             <h1 className="text-4xl md:text-5xl font-bold tracking-tighter pr-8 max-w-[80%]">
               {title}
             </h1>
             <nav className="pt-2">
-              <HamburgerMenu links={articleNavLinks} />
+              <HamburgerMenu links={navigationLinks} />
             </nav>
           </div>
         </header>

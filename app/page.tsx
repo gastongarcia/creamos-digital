@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import HamburgerMenu from "./components/HamburgerMenu";
+import navigationLinks from "./components/navigationLinks";
 
 export default function Home() {
   const phrases = [
@@ -57,12 +58,6 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [currentPhrase, delta, isDeleting, phraseIndex, phrases]);
 
-  const homeNavLinks = [
-    { href: "/", label: "Inicio" },
-    { href: "/articulos", label: "Artículos" },
-    { href: "https://tally.so/r/w8Robl", label: "Contacto" },
-  ];
-
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-12">
       <div className="max-w-4xl mx-auto">
@@ -73,7 +68,7 @@ export default function Home() {
               Creamos
             </h1>
             <nav className="pt-2 flex-shrink-0">
-              <HamburgerMenu links={homeNavLinks} />
+              <HamburgerMenu links={navigationLinks} />
             </nav>
           </div>
 
@@ -100,7 +95,7 @@ export default function Home() {
               tecnológicas para organizaciones como Movistar, Uber y
               Mercedes-Benz, alternando entre la dirección de equipos
               multidisciplinarios y el desarrollo especializado para empresas en
-              Costa Rica y todo Centroamérica.
+              Costa Rica y Centroamérica.
             </p>
             <p className="text-xl md:text-2xl">
               Trabajamos de forma deliberadamente selectiva. La atención
