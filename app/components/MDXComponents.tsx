@@ -1,4 +1,3 @@
-import { MDXRemoteProps } from "next-mdx-remote/rsc";
 import Link from "next/link";
 
 // Custom components for MDX styling that follow the brutalist design
