@@ -148,9 +148,7 @@ export default function Home() {
 
             <p className="text-xl md:text-2xl mb-6">
               Durante ese recorrido he liderado iniciativas tecnológicas para
-              organizaciones como Movistar, Uber y Mercedes-Benz, alternando
-              entre la dirección de equipos multidisciplinarios y el desarrollo
-              especializado.
+              organizaciones como Movistar, Mondelez, Mercedes-Benz y Legrand.
             </p>
 
             <Link
@@ -222,6 +220,19 @@ export default function Home() {
                 <span>No siguen recomendaciones estratégicas</span>
               </li>
             </ul>
+          </section>
+
+          <section className="border-b-2 border-black pb-8">
+            <h2 className="text-3xl md:text-4xl font-bold mb-6">
+              ONG y fundaciones
+            </h2>
+
+            <p className="text-xl md:text-2xl">
+              Si formas parte de una ONG o fundación y necesitas ayuda con un
+              proyecto digital, escríbeme. Si la causa conecta conmigo y creo
+              que puedo aportar, buscaré la forma de ayudar. Si el presupuesto
+              es un problema, escríbeme igual.
+            </p>
           </section>
 
           <section className="text-center py-8">
