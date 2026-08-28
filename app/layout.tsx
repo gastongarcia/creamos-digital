@@ -9,8 +9,33 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "CREAMOS",
-  description: "CREAMOS - en ideas claras",
+  metadataBase: new URL("https://creamos.digital"),
+  title: {
+    default: "Gastón García | Consultor digital y AI-forward developer",
+    template: "%s | Creamos Digital",
+  },
+  description:
+    "Gastón García ayuda a empresas a evaluar, dirigir y desarrollar proyectos digitales, integrando inteligencia artificial cuando aporta valor. Costa Rica y Latinoamérica.",
+  authors: [{ name: "Gastón García", url: "https://creamos.digital/" }],
+  creator: "Gastón García",
+  openGraph: {
+    type: "website",
+    locale: "es_CR",
+    siteName: "Creamos Digital",
+    title: "Gastón García | Consultor digital y AI-forward developer",
+    description:
+      "Consultoría digital, dirección de productos y AI-forward development desde Costa Rica para Latinoamérica.",
+    url: "/",
+  },
+  twitter: {
+    card: "summary",
+    title: "Gastón García | Consultor digital y AI-forward developer",
+    description:
+      "Consultoría digital, dirección de productos y AI-forward development desde Costa Rica para Latinoamérica.",
+  },
+  alternates: {
+    canonical: "/",
+  },
 };
 
 export default function RootLayout({
@@ -19,7 +44,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="es">
       <body className={`${spaceGrotesk.variable} antialiased`}>{children}</body>
     </html>
   );

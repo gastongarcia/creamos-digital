@@ -7,6 +7,25 @@ import matter from "gray-matter";
 import HamburgerMenu from "../../components/HamburgerMenu";
 import navigationLinks from "../../components/navigationLinks";
 
+const translatedArticles = {
+  "ai-seo-marketing-realidad": {
+    es: "/articulos/ai-seo-marketing-realidad",
+    en: "/articulos/ai-seo-marketing-reality",
+  },
+  "ai-seo-marketing-reality": {
+    es: "/articulos/ai-seo-marketing-realidad",
+    en: "/articulos/ai-seo-marketing-reality",
+  },
+  "el-derecho-al-descanso": {
+    es: "/articulos/el-derecho-al-descanso",
+    en: "/articulos/the-right-to-rest",
+  },
+  "the-right-to-rest": {
+    es: "/articulos/el-derecho-al-descanso",
+    en: "/articulos/the-right-to-rest",
+  },
+};
+
 // Function to get article data for metadata
 function getArticleData(slug) {
   try {
@@ -27,6 +46,7 @@ function getArticleData(slug) {
         title,
         description: data.description || `Artículo: ${title}`,
         language,
+        date: data.date || null,
       };
     }
   } catch (error) {
@@ -37,6 +57,7 @@ function getArticleData(slug) {
     title: "Artículo | Creamos Digital",
     description: "Artículo en Creamos Digital",
     language: "es",
+    date: null,
   };
 }
 
@@ -106,10 +127,26 @@ export async function generateMetadata({ params }) {
   const resolvedParams = await params;
   const slug = resolvedParams.slug || "unknown";
   const articleData = getArticleData(slug);
+  const languages = translatedArticles[slug];
 
   return {
-    title: `${articleData.title} | Creamos Digital`,
+    title: articleData.title,
     description: articleData.description,
+    authors: [{ name: "Gastón García", url: "https://creamos.digital/" }],
+    creator: "Gastón García",
+    alternates: {
+      canonical: `/articulos/${slug}`,
+      ...(languages ? { languages } : {}),
+    },
+    openGraph: {
+      type: "article",
+      title: `${articleData.title} | Creamos Digital`,
+      description: articleData.description,
+      url: `/articulos/${slug}`,
+      locale: articleData.language === "en" ? "en_US" : "es_CR",
+      authors: ["Gastón García"],
+      ...(articleData.date ? { publishedTime: articleData.date } : {}),
+    },
   };
 }
 
@@ -277,6 +314,7 @@ export default async function ArticlePage({ params }) {
   let date = null;
   let htmlContent = "<p>Content not available</p>";
   let language = "es";
+  let description = `Artículo: ${slug}`;
 
   try {
     // Read the file
@@ -293,6 +331,7 @@ export default async function ArticlePage({ params }) {
 
       // Detect language from title if not specified in frontmatter
       language = data.language || detectLanguage(title);
+      description = data.description || `Artículo: ${title}`;
 
       // Convert markdown to HTML
       htmlContent = markdownToHtml(content);
@@ -301,8 +340,37 @@ export default async function ArticlePage({ params }) {
     // Silently continue with defaults if any error occurs
   }
 
+  const articleStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: title,
+    description,
+    inLanguage: language,
+    mainEntityOfPage: `https://creamos.digital/articulos/${slug}`,
+    author: {
+      "@type": "Person",
+      "@id": "https://creamos.digital/#gaston-garcia",
+      name: "Gastón García",
+      url: "https://creamos.digital/",
+      sameAs: "https://www.linkedin.com/in/gastongarcia/",
+    },
+    publisher: {
+      "@type": "Organization",
+      "@id": "https://creamos.digital/#organization",
+      name: "Creamos Digital",
+      url: "https://creamos.digital/",
+    },
+    ...(date ? { datePublished: date.toISOString() } : {}),
+  };
+
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-12">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(articleStructuredData),
+        }}
+      />
       <div className="max-w-4xl mx-auto">
         <header className="py-16 md:py-20 border-b-4 border-black mb-12">
           <Link
@@ -322,10 +390,19 @@ export default async function ArticlePage({ params }) {
         </header>
 
         <main>
-          <article className="space-y-4">
+          <article className="space-y-4" lang={language}>
             {date && (
               <div className="text-xl mb-2">{formatDate(date, language)}</div>
             )}
+            <p className="text-xl mb-6">
+              {language === "es" ? "Por" : "By"}{" "}
+              <Link
+                href="/#gaston-garcia"
+                className="font-bold border-b-2 border-black hover:bg-black hover:text-white"
+              >
+                Gastón García
+              </Link>
+            </p>
             <div
               className="article-content text-xl"
               dangerouslySetInnerHTML={{ __html: htmlContent }}

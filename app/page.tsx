@@ -7,6 +7,44 @@ import HamburgerMenu from "./components/HamburgerMenu";
 import navigationLinks from "./components/navigationLinks";
 
 export default function Home() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Person",
+        "@id": "https://creamos.digital/#gaston-garcia",
+        name: "Gastón García",
+        url: "https://creamos.digital/",
+        jobTitle: ["Consultor digital", "AI-forward developer"],
+        knowsAbout: [
+          "Consultoría digital",
+          "Desarrollo de productos digitales",
+          "Inteligencia artificial",
+          "AI-forward development",
+          "Capacitación en inteligencia artificial",
+        ],
+        homeLocation: {
+          "@type": "Country",
+          name: "Costa Rica",
+        },
+        sameAs: ["https://www.linkedin.com/in/gastongarcia/"],
+        worksFor: {
+          "@id": "https://creamos.digital/#organization",
+        },
+      },
+      {
+        "@type": "ProfessionalService",
+        "@id": "https://creamos.digital/#organization",
+        name: "Creamos Digital",
+        url: "https://creamos.digital/",
+        founder: {
+          "@id": "https://creamos.digital/#gaston-garcia",
+        },
+        areaServed: ["Costa Rica", "Centroamérica", "Latinoamérica"],
+      },
+    ],
+  };
+
   const phrases = [
     "en ideas claras",
     "en productos útiles",
@@ -60,13 +98,17 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-12">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <div className="max-w-4xl mx-auto">
         {/* Hero Section */}
         <header className="py-16 md:py-24 border-b-4 border-black mb-12">
           <div className="flex justify-between items-start mb-8">
-            <h1 className="text-5xl sm:text-6xl md:text-9xl font-bold tracking-tighter uppercase pr-4">
+            <div className="text-5xl sm:text-6xl md:text-9xl font-bold tracking-tighter uppercase pr-4">
               Creamos
-            </h1>
+            </div>
             <nav className="pt-2 flex-shrink-0">
               <HamburgerMenu links={navigationLinks} />
             </nav>
@@ -82,63 +124,81 @@ export default function Home() {
 
         {/* Main Content */}
         <main className="space-y-12">
-          <section className="border-b-2 border-black pb-8">
+          <section
+            id="gaston-garcia"
+            className="border-b-2 border-black pb-8 scroll-mt-8"
+          >
+            <h1 className="text-4xl md:text-5xl font-bold mb-6">
+              Gastón García
+            </h1>
             <p className="text-xl md:text-2xl mb-6">
-              Transformamos ideas en proyectos web funcionales y sostenibles
-              desde hace más de dos décadas. Nuestra metodología se basa en la
-              planificación rigurosa y la optimización de recursos, evitando el
-              desperdicio habitual en el desarrollo digital.
+              Ayudo a empresas a entender dónde están sus proyectos digitales,
+              decidir qué conviene hacer primero y avanzar sin desperdiciar
+              tiempo ni recursos. Combino más de dos décadas de experiencia en
+              estrategia, desarrollo y dirección de productos digitales,
+              incorporando inteligencia artificial cuando realmente aporta
+              valor.
             </p>
 
             <p className="text-xl md:text-2xl mb-6">
-              Bajo la dirección de Gastón García, hemos liderado iniciativas
-              tecnológicas para organizaciones como Movistar, Uber y
-              Mercedes-Benz, alternando entre la dirección de equipos
-              multidisciplinarios y el desarrollo especializado para empresas en
-              Costa Rica y Centroamérica.
+              Trabajo desde Costa Rica con organizaciones de Centroamérica y
+              Latinoamérica, ya sea ejecutando directamente, dirigiendo equipos
+              internos o acompañando agencias externas.
             </p>
-            <p className="text-xl md:text-2xl">
-              Trabajamos de forma deliberadamente selectiva. La atención
-              concentrada en pocos proyectos nos permite mantener estándares de
-              calidad consistentes. Actualmente dirigimos proyectos para
-              compañías en toda Latinoamérica, manteniendo equipos reducidos y
-              comunicación directa.
+
+            <p className="text-xl md:text-2xl mb-6">
+              Durante ese recorrido he liderado iniciativas tecnológicas para
+              organizaciones como Movistar, Uber y Mercedes-Benz, alternando
+              entre la dirección de equipos multidisciplinarios y el desarrollo
+              especializado.
             </p>
+
+            <Link
+              href="https://www.linkedin.com/in/gastongarcia/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-xl font-bold border-b-2 border-black hover:bg-black hover:text-white"
+            >
+              LinkedIn de Gastón García →
+            </Link>
           </section>
 
           <section className="border-b-2 border-black pb-8">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Si buscas ayuda profesional con tu proyecto digital
+              Cómo puedo ayudar
             </h2>
 
-            <ul className="space-y-3 text-xl">
-              <li className="flex items-start">
-                <span className="mr-2 text-2xl font-bold">✓</span>
-                <span>Auditoría y análisis de un sitio web existente</span>
-              </li>
-              <li className="flex items-start">
-                <span className="mr-2 text-2xl font-bold">✓</span>
-                <span>
-                  Planificación y estrategia antes de lanzar un nuevo proyecto
-                </span>
-              </li>
-              <li className="flex items-start">
-                <span className="mr-2 text-2xl font-bold">✓</span>
-                <span>Optimización y mejora de sitios web con tu equipo</span>
-              </li>
-              <li className="flex items-start">
-                <span className="mr-2 text-2xl font-bold">✓</span>
-                <span>
-                  Capacitación en desarrollo web para equipos internos
-                </span>
-              </li>
-              <li className="flex items-start">
-                <span className="mr-2 text-2xl font-bold">✓</span>
-                <span>
-                  Desarrollo eficiente con IA y herramientas de automatización
-                </span>
-              </li>
-            </ul>
+            <div className="space-y-8">
+              <div>
+                <h3 className="text-2xl md:text-3xl font-bold mb-2">
+                  1. Consultoría digital senior
+                </h3>
+                <p className="text-xl">
+                  Evaluación, priorización y dirección de proyectos digitales
+                  para decidir qué conviene hacer primero y cómo avanzar.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-2xl md:text-3xl font-bold mb-2">
+                  2. AI-forward development
+                </h3>
+                <p className="text-xl">
+                  Diseño y desarrollo de productos digitales utilizando IA de
+                  manera deliberada, práctica y responsable.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-2xl md:text-3xl font-bold mb-2">
+                  3. Capacitación en inteligencia artificial
+                </h3>
+                <p className="text-xl">
+                  Formación práctica para profesionales y equipos que necesitan
+                  integrar IA en su trabajo.
+                </p>
+              </div>
+            </div>
           </section>
 
           <section className="border-b-2 border-black pb-8">

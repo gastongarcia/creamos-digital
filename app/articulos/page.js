@@ -7,9 +7,20 @@ import navigationLinks from "../components/navigationLinks";
 
 // Metadata for the page
 export const metadata = {
-  title: "Artículos | Creamos Digital",
+  title: "Artículos",
   description:
     "Artículos sobre desarrollo web, marketing digital, estrategias de contenido e inteligencia artificial.",
+  authors: [{ name: "Gastón García", url: "https://creamos.digital/" }],
+  alternates: {
+    canonical: "/articulos",
+  },
+  openGraph: {
+    type: "website",
+    title: "Artículos | Creamos Digital",
+    description:
+      "Artículos de Gastón García sobre desarrollo web, estrategia digital e inteligencia artificial.",
+    url: "/articulos",
+  },
 };
 
 // Simple language detection function
