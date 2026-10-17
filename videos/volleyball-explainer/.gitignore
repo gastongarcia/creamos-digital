@@ -3,3 +3,6 @@ snaps/
 silent.mp4
 audio.wav
 sfx.json
+narr/
+lines.json
+render.log

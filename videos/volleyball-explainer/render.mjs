@@ -21,7 +21,10 @@ async function openPage() {
 const grab = (page, t) => page.evaluate(t => { renderAt(t); return document.getElementById('c').toDataURL('image/jpeg', 0.93); }, t)
   .then(d => Buffer.from(d.split(',')[1], 'base64'));
 
-if (mode === 'snap') {
+if (mode === 'lines') {
+  const page = await openPage();
+  writeFileSync(join(here, 'lines.json'), JSON.stringify(await page.evaluate(() => LINES), null, 1));
+} else if (mode === 'snap') {
   const page = await openPage();
   const out = join(here, 'snaps'); mkdirSync(out, { recursive: true });
   for (const t of args.map(Number)) writeFileSync(join(out, `t${t.toFixed(1)}.jpg`), await grab(page, t));
@@ -30,7 +33,7 @@ if (mode === 'snap') {
   const outFile = resolve(args[0] || 'out.mp4'), fps = Number(args[1] || 30), workers = 4;
   const probe = await openPage();
   const duration = await probe.evaluate(() => DURATION);
-  writeFileSync(join(here, 'sfx.json'), JSON.stringify(await probe.evaluate(() => SFX)));
+  writeFileSync(join(here, 'sfx.json'), JSON.stringify(await probe.evaluate(() => ({ duration: DURATION, sfx: SFX, narration: NARR_TIMES, chapters: CHAPTERS }))));
   await probe.close();
   const frames = Math.ceil(duration * fps), per = Math.ceil(frames / workers);
   const tmp = join(here, '.parts'); rmSync(tmp, { recursive: true, force: true }); mkdirSync(tmp);

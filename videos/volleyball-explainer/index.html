@@ -27,6 +27,8 @@
     <span id="time">0:00</span>
   </div>
 </div>
+<script>window.NARR = null;</script>
+<script src="narration.js"></script>
 <script>
 // ---------------------------------------------------------------------------
 // Basics
@@ -477,6 +479,7 @@ function contactsSfx(cs, toScene) { return cs.filter(c => c.sfx).map(c => [toSce
 // ---- 0. Title -------------------------------------------------------------
 addScene({
   dur: 6.5,
+  narr: [[0.9, "Women's volleyball: the rules and the positions, explained through a game."]],
   draw(t) {
     drawCourt({ alpha: .22 });
     const b = rallyBall(this.cs, t);
@@ -1200,17 +1203,43 @@ const SERVE_A = A(10.2, 2.5), SERVE_B = B(10.2, 2.5);
 // ---------------------------------------------------------------------------
 // Timeline
 // ---------------------------------------------------------------------------
+// Each narration line gets at least its spoken length plus a pause; the
+// animation between two lines is stretched (never squeezed) to fit.
+const NARR = window.NARR || {};
+const PAD = 1.4;
 let acc = 0;
-for (const s of scenes) { s.start = acc; acc += s.dur; }
+scenes.forEach((s, i) => {
+  const lines = s.caps || s.narr || [];
+  const b = [0, ...lines.map(c => c[0]), s.dur];
+  s.segs = []; let v = 0;
+  for (let k = 0; k < b.length - 1; k++) {
+    const olen = Math.max(0, b[k + 1] - b[k]), d = k > 0 && NARR[i] ? NARR[i][k - 1] : 0;
+    const L = Math.max(olen, d ? d + PAD : 0);
+    s.segs.push({ o0: b[k], olen, v0: v, L }); v += L;
+  }
+  s.start = acc; s.vdur = v; acc += v;
+});
+function toOrig(s, tv) {
+  for (const g of s.segs) if (tv < g.v0 + g.L) return g.o0 + (tv - g.v0) * g.olen / g.L;
+  return s.dur;
+}
+function toVideo(s, to) {
+  for (const g of s.segs) if (to <= g.o0 + g.olen && g.L > 0) return g.v0 + (g.olen ? (to - g.o0) * g.L / g.olen : 0);
+  return s.vdur;
+}
 const DURATION = acc;
 const SFX = [];
-for (const s of scenes) for (const [t, type] of s.sfx) SFX.push([+(s.start + t).toFixed(3), type]);
+for (const s of scenes) for (const [t, type] of s.sfx) SFX.push([+(s.start + toVideo(s, t)).toFixed(3), type]);
 SFX.sort((a, b) => a[0] - b[0]);
+const LINES = scenes.map(s => (s.caps || s.narr || []).map(c => c[1]));
+const NARR_TIMES = [];
+scenes.forEach((s, i) => (s.caps || s.narr || []).forEach((c, k) => NARR_TIMES.push([+(s.start + toVideo(s, c[0]) + .15).toFixed(3), i, k])));
+const CHAPTERS = scenes.map(s => +s.start.toFixed(1));
 
 function renderAt(T) {
   NOW = T;
-  const sc = scenes.find(s => T >= s.start && T < s.start + s.dur) || scenes[scenes.length - 1];
-  const t = T - sc.start;
+  const sc = scenes.find(s => T >= s.start && T < s.start + s.vdur) || scenes[scenes.length - 1];
+  const t = toOrig(sc, T - sc.start);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#0d1628'); g.addColorStop(1, '#090f1c');
@@ -1226,6 +1255,7 @@ function renderAt(T) {
   ctx.fillStyle = ACCENT; ctx.fillRect(0, H - 6, W * T / DURATION, 6);
 }
 window.renderAt = renderAt; window.DURATION = DURATION; window.SFX = SFX;
+window.LINES = LINES; window.NARR_TIMES = NARR_TIMES; window.CHAPTERS = CHAPTERS;
 
 // ---------------------------------------------------------------------------
 // Interactive player (ignored when rendering to video)
