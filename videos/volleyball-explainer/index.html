@@ -1,0 +1,1247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Volleyball Explained</title>
+<style>
+  :root { --bg:#0b1220; --fg:#e8eef7; --muted:#93a3b8; --accent:#ffd43b; }
+  html,body { margin:0; background:var(--bg); color:var(--fg); font-family:Inter,system-ui,sans-serif; }
+  .wrap { max-width:1280px; margin:0 auto; padding:16px; }
+  canvas { width:100%; height:auto; display:block; border-radius:10px; background:#0b1220; }
+  .controls { display:flex; gap:12px; align-items:center; margin-top:10px; }
+  .controls input { flex:1; }
+  .controls button { background:#1d2a44; color:var(--fg); border:0; border-radius:8px; padding:8px 14px; font:600 14px Inter,system-ui,sans-serif; cursor:pointer; }
+  .controls span { font:500 13px Inter,system-ui,sans-serif; color:var(--muted); min-width:90px; text-align:right; }
+  body.render .wrap { padding:0; max-width:none; }
+  body.render .controls { display:none; }
+  body.render canvas { border-radius:0; width:1920px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="c" width="1920" height="1080"></canvas>
+  <div class="controls">
+    <button id="play">Play</button>
+    <input id="seek" type="range" min="0" max="1000" value="0">
+    <span id="time">0:00</span>
+  </div>
+</div>
+<script>
+// ---------------------------------------------------------------------------
+// Basics
+// ---------------------------------------------------------------------------
+const W = 1920, H = 1080, SC = 54, CX = 690, CY = 520;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const ROLE = { S:'#ffd43b', OH:'#ff6b6b', MB:'#66d9ff', OPP:'#c29bff', L:'#5ee07a', N:'#cfd8e3' };
+const ROLE_NAME = { S:'Setter', OH:'Outside hitter', MB:'Middle blocker', OPP:'Opposite', L:'Libero' };
+const RING = { A:'#ffffff', B:'#0b0f17' };
+const BG = '#0b1220', INK = '#e8eef7', MUTED = '#93a3b8', ACCENT = '#ffd43b', GOOD = '#5ee07a', BAD = '#ff5c5c';
+let NOW = 0;
+
+const px = x => CX + x * SC, py = y => CY + y * SC;
+// Team-local coordinates: d = distance from the net, r = to the player's right (facing the net).
+const A = (d, r) => [-d, r], B = (d, r) => [d, -r];
+const Z = { 1:[6.8,3], 2:[1.8,3], 3:[1.8,0], 4:[1.8,-3], 5:[6.8,-3], 6:[6.8,0] };
+const AZ = n => A(...Z[n]), BZ = n => B(...Z[n]);
+const NEXT = { 1:6, 2:1, 3:2, 4:3, 5:4, 6:5 };   // clockwise rotation
+
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const eio = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const ein = t => t * t, eout = t => 1 - (1 - t) * (1 - t);
+const fadeWin = (t, a, b, f = .35) => clamp((t - a) / f) * clamp((b - t) / f);
+
+// keys: [[t, [x,y], 'w'?], ...]  'w' = pass through without stopping
+function at(keys, t) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 0; i < keys.length - 1; i++) {
+    const k0 = keys[i], k1 = keys[i + 1];
+    if (t < k1[0]) {
+      const u = clamp((t - k0[0]) / (k1[0] - k0[0]));
+      const w0 = k0[2] === 'w', w1 = k1[2] === 'w';
+      const e = w0 && w1 ? u : w0 ? eout(u) : w1 ? ein(u) : eio(u);
+      return [lerp(k0[1][0], k1[1][0], e), lerp(k0[1][1], k1[1][1], e)];
+    }
+  }
+  return keys[keys.length - 1][1];
+}
+
+// ---------------------------------------------------------------------------
+// Players
+// ---------------------------------------------------------------------------
+const META = {
+  aS:['A','S','S'], aOH1:['A','OH','OH1'], aOH2:['A','OH','OH2'], aMB1:['A','MB','MB1'], aMB2:['A','MB','MB2'], aOPP:['A','OPP','OPP'], aL:['A','L','L'],
+  bS:['B','S','S'], bOH1:['B','OH','OH1'], bOH2:['B','OH','OH2'], bMB1:['B','MB','MB1'], bMB2:['B','MB','MB2'], bOPP:['B','OPP','OPP'], bL:['B','L','L'],
+};
+function mkCast(keysById, jumps = {}) {
+  return Object.entries(keysById).map(([id, keys]) => {
+    const [team, role, label] = META[id];
+    return { id, team, role, label, keys: Array.isArray(keys[0]) && typeof keys[0][0] === 'number' ? keys : [[0, keys]], jumps: jumps[id] || [] };
+  });
+}
+function jumpAmt(p, t) {
+  for (const [a, b] of p.jumps) if (t >= a && t <= b) return Math.sin(Math.PI * (t - a) / (b - a));
+  return 0;
+}
+function posOf(cast, id, t) { return at(cast.find(p => p.id === id).keys, t); }
+
+function drawPlayer(p, [x, y], alpha, jump, hi, flag) {
+  const X = px(x), Y = py(y), lift = jump * 26, r = 25 * (1 + jump * .22);
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath(); ctx.ellipse(X, Y + 7, r * .95 - jump * 4, r * .5, 0, 0, 7); ctx.fill();
+  if (hi > 0) {
+    const ph = (NOW * 1.6) % 1;
+    ctx.strokeStyle = ROLE[p.role]; ctx.lineWidth = 4;
+    ctx.globalAlpha = alpha * hi * (1 - ph);
+    ctx.beginPath(); ctx.arc(X, Y - lift, r + 6 + ph * 22, 0, 7); ctx.stroke();
+    ctx.globalAlpha = alpha;
+  }
+  if (flag > 0) {
+    ctx.strokeStyle = BAD; ctx.lineWidth = 6; ctx.globalAlpha = alpha * flag;
+    ctx.beginPath(); ctx.arc(X, Y - lift, r + 9 + Math.sin(NOW * 12) * 3, 0, 7); ctx.stroke();
+    ctx.globalAlpha = alpha;
+  }
+  ctx.fillStyle = ROLE[p.role];
+  ctx.beginPath(); ctx.arc(X, Y - lift, r, 0, 7); ctx.fill();
+  ctx.lineWidth = 4; ctx.strokeStyle = RING[p.team]; ctx.stroke();
+  ctx.fillStyle = '#0b1220';
+  ctx.font = `800 ${p.label.length > 2 ? 15 : 18}px ${FONT}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(p.label, X, Y - lift + 1);
+  ctx.restore();
+}
+function drawCast(cast, t, opt = {}) {
+  const items = cast.map(p => ({ p, pos: at(p.keys, t) })).sort((a, b) => a.pos[1] - b.pos[1]);
+  for (const it of items) {
+    const a = opt.alpha ? opt.alpha(it.p, t) : 1;
+    if (a <= .01) continue;
+    drawPlayer(it.p, it.pos, a, jumpAmt(it.p, t), opt.hi ? opt.hi(it.p, t) : 0, opt.flag ? opt.flag(it.p, t) : 0);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ball & rally contacts
+// ---------------------------------------------------------------------------
+// contact: {t, p:[x,y], h, peak, kind, team, touch, pop, card}
+function rallyBall(cs, t) {
+  if (t < cs[0].t) return null;
+  for (let i = 0; i < cs.length - 1; i++) {
+    const a = cs[i], b = cs[i + 1];
+    if (t < b.t) {
+      const u = (t - a.t) / (b.t - a.t);
+      return { x: lerp(a.p[0], b.p[0], u), y: lerp(a.p[1], b.p[1], u), h: lerp(a.h, b.h, u) + 4 * (a.peak || 0) * u * (1 - u) };
+    }
+  }
+  const l = cs[cs.length - 1];
+  return { x: l.p[0], y: l.p[1], h: l.h };
+}
+function drawBall(b, alpha = 1) {
+  if (!b) return;
+  const X = px(b.x), Y = py(b.y), up = b.h * 20, r = 12 + b.h * 1.4;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  ctx.fillStyle = `rgba(0,0,0,${.4 - Math.min(b.h, 5) * .05})`;
+  ctx.beginPath(); ctx.ellipse(X, Y + 4, 11 - Math.min(b.h, 5), 5.5 - Math.min(b.h, 5) * .5, 0, 0, 7); ctx.fill();
+  const cy = Y - up;
+  ctx.fillStyle = '#ffe066';
+  ctx.beginPath(); ctx.arc(X, cy, r, 0, 7); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(X, cy, r, 0, 7); ctx.clip();
+  ctx.strokeStyle = '#2b6cd8'; ctx.lineWidth = r * .38;
+  const sp = NOW * 6;
+  ctx.beginPath(); ctx.arc(X - r * .9, cy - r * .9, r * 1.25, sp, sp + 1.6); ctx.stroke();
+  ctx.beginPath(); ctx.arc(X + r * 1.1, cy + r * .8, r * 1.2, sp + 3, sp + 4.6); ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = '#11305e'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(X, cy, r, 0, 7); ctx.stroke();
+  ctx.restore();
+}
+function drawPops(cs, t) {
+  for (const c of cs) {
+    if (!c.pop || t < c.t || t > c.t + 1.8) continue;
+    const age = t - c.t, a = clamp(age / .15) * clamp((1.8 - age) / .4);
+    const s = 1 + .25 * Math.max(0, 1 - age / .2);
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.translate(px(c.p[0]) + (c.popDx || 0), py(c.p[1]) - 70 + (c.popDy || 0) - age * 22); ctx.scale(s, s);
+    ctx.font = `800 30px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(8,12,24,.9)'; ctx.lineJoin = 'round';
+    ctx.strokeText(c.pop, 0, 0);
+    ctx.fillStyle = c.popColor || '#ffffff'; ctx.fillText(c.pop, 0, 0);
+    ctx.restore();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Court
+// ---------------------------------------------------------------------------
+function rectM(x0, y0, x1, y1) { ctx.rect(px(x0), py(y0), (x1 - x0) * SC, (y1 - y0) * SC); }
+function rectTeam(team, d0, d1, r0, r1) {
+  const c = [[d0, r0], [d1, r1]].map(([d, r]) => team === 'A' ? A(d, r) : B(d, r));
+  const x0 = Math.min(c[0][0], c[1][0]), x1 = Math.max(c[0][0], c[1][0]);
+  const y0 = Math.min(c[0][1], c[1][1]), y1 = Math.max(c[0][1], c[1][1]);
+  rectM(x0, y0, x1, y1);
+}
+function drawCourt(o = {}) {
+  const p = o.lines ?? 1, alpha = o.alpha ?? 1;
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#163a62';
+  ctx.beginPath(); ctx.roundRect(px(-11.5), py(-6), 23 * SC, 12 * SC, 18); ctx.fill();
+  ctx.fillStyle = '#22598f';
+  ctx.beginPath(); rectM(-9, -4.5, 9, 4.5); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.05)';
+  ctx.beginPath(); rectM(-3, -4.5, 3, 4.5); ctx.fill();
+  // lines
+  ctx.strokeStyle = '#f4f7fb'; ctx.lineWidth = 4; ctx.lineCap = 'square';
+  const segs = [[-9,-4.5,9,-4.5],[9,-4.5,9,4.5],[9,4.5,-9,4.5],[-9,4.5,-9,-4.5],[0,-4.5,0,4.5],[-3,-4.5,-3,4.5],[3,-4.5,3,4.5]];
+  for (const [x0, y0, x1, y1] of segs) {
+    ctx.beginPath(); ctx.moveTo(px(x0), py(y0)); ctx.lineTo(px(lerp(x0, x1, p)), py(lerp(y0, y1, p))); ctx.stroke();
+  }
+  // attack line extensions
+  ctx.setLineDash([10, 10]); ctx.lineWidth = 3; ctx.globalAlpha = alpha * p;
+  for (const x of [-3, 3]) for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(px(x), py(s * 4.75)); ctx.lineTo(px(x), py(s * 6)); ctx.stroke(); }
+  ctx.setLineDash([]);
+  // zone numbers
+  if (o.zones) {
+    ctx.font = `800 64px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const n of [1,2,3,4,5,6]) for (const [team, f] of [['A', AZ], ['B', BZ]]) {
+      const za = typeof o.zones === 'function' ? o.zones(team, n) : o.zones;
+      if (za <= 0) continue;
+      ctx.globalAlpha = alpha * za; ctx.fillStyle = '#ffffff';
+      const [x, y] = f(n); ctx.fillText(n, px(x), py(y));
+    }
+  }
+  // net
+  ctx.globalAlpha = alpha * clamp(p * 2 - 1);
+  ctx.fillStyle = '#0d1424';
+  ctx.fillRect(px(0) - 5, py(-5.3), 10, 10.6 * SC);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(px(0) - 2, py(-5.3), 4, 10.6 * SC);
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#d7dde6'; ctx.beginPath(); ctx.arc(px(0), py(s * 5.45), 8, 0, 7); ctx.fill();
+    for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? '#ffffff' : '#ff4d4d'; ctx.fillRect(px(0) - 4, py(s * 4.5) - 12 + i * 6, 8, 6); }
+  }
+  ctx.restore();
+}
+function teamLabels(alpha = 1, which = 'AB') {
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.font = `800 22px ${FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  for (const [team, x] of [['A', -4.5], ['B', 4.5]]) {
+    if (!which.includes(team)) continue;
+    const X = px(x), Y = py(-5.45);
+    ctx.fillStyle = team === 'A' ? '#ffffff' : '#0b0f17';
+    ctx.beginPath(); ctx.roundRect(X - 70, Y - 18, 140, 36, 18); ctx.fill();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = team === 'A' ? '#0b0f17' : '#ffffff';
+    ctx.fillText('TEAM ' + team, X, Y + 1);
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Annotation helpers
+// ---------------------------------------------------------------------------
+function arrow(from, to, o = {}) {
+  const a = o.alpha ?? 1; if (a <= 0) return;
+  const [x0, y0] = [px(from[0]), py(from[1])], [x1, y1] = [px(to[0]), py(to[1])];
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy); if (len < 4) return;
+  const bend = o.bend ?? 0, mx = (x0 + x1) / 2 - dy / len * bend, my = (y0 + y1) / 2 + dx / len * bend;
+  const trim = o.trim ?? 30, prog = o.prog ?? 1;
+  // sample the curve so we can trim ends and draw progressively
+  const pts = [];
+  for (let i = 0; i <= 40; i++) { const u = i / 40; pts.push([(1-u)*(1-u)*x0 + 2*(1-u)*u*mx + u*u*x1, (1-u)*(1-u)*y0 + 2*(1-u)*u*my + u*u*y1]); }
+  let acc = [0]; for (let i = 1; i < pts.length; i++) acc.push(acc[i-1] + Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]));
+  const total = acc[acc.length - 1], s0 = Math.min(trim, total * .3), s1 = s0 + (total - 2 * s0) * prog;
+  const seg = pts.filter((_, i) => acc[i] >= s0 && acc[i] <= s1); if (seg.length < 2) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = o.color || '#ffffff'; ctx.fillStyle = o.color || '#ffffff';
+  ctx.lineWidth = o.width || 4; ctx.lineCap = 'round';
+  if (o.dash) ctx.setLineDash([12, 10]);
+  ctx.beginPath(); seg.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+  ctx.setLineDash([]);
+  const e = seg[seg.length - 1], f = seg[seg.length - 2], ang = Math.atan2(e[1] - f[1], e[0] - f[0]), hs = (o.width || 4) * 3.4;
+  ctx.beginPath(); ctx.moveTo(e[0] + Math.cos(ang) * hs * .6, e[1] + Math.sin(ang) * hs * .6);
+  ctx.lineTo(e[0] + Math.cos(ang + 2.5) * hs, e[1] + Math.sin(ang + 2.5) * hs);
+  ctx.lineTo(e[0] + Math.cos(ang - 2.5) * hs, e[1] + Math.sin(ang - 2.5) * hs); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function labelAt(text, x, y, o = {}) {
+  const a = o.alpha ?? 1; if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.font = `${o.weight || 700} ${o.size || 22}px ${FONT}`; ctx.textAlign = o.align || 'center'; ctx.textBaseline = 'middle';
+  if (o.rot) { ctx.translate(x, y); ctx.rotate(o.rot); x = 0; y = 0; }
+  if (o.bg) {
+    const w = ctx.measureText(text).width + 24, h = (o.size || 22) + 16;
+    const bx = o.align === 'left' ? x - 12 : o.align === 'right' ? x - w + 12 : x - w / 2;
+    ctx.fillStyle = o.bg; ctx.beginPath(); ctx.roundRect(bx, y - h / 2, w, h, h / 2); ctx.fill();
+  }
+  if (o.stroke) { ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(8,12,24,.85)'; ctx.lineJoin = 'round'; ctx.strokeText(text, x, y); }
+  ctx.fillStyle = o.color || INK; ctx.fillText(text, x, y);
+  ctx.restore();
+}
+function dimLine(x0, y0, x1, y1, text, a, o = {}) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#ffffff'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  const ang = Math.atan2(y1 - y0, x1 - x0);
+  for (const [x, y, s] of [[x0, y0, 1], [x1, y1, -1]]) {
+    ctx.beginPath(); ctx.moveTo(x, y);
+    ctx.lineTo(x + s * Math.cos(ang + .45) * 14, y + s * Math.sin(ang + .45) * 14);
+    ctx.lineTo(x + s * Math.cos(ang - .45) * 14, y + s * Math.sin(ang - .45) * 14); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  if (text) labelAt(text, (x0 + x1) / 2 + (o.dx || 0), (y0 + y1) / 2 + (o.dy || 0), { alpha: a, size: o.size || 26, weight: 800, bg: '#0b1220', rot: o.rot });
+}
+
+// rich text: *word* = highlighted
+function richWrap(text, maxW, size, weight = 600) {
+  const words = [];
+  text.split('*').forEach((part, i) => part.split(/(\s+)/).forEach(w => { if (w) words.push({ w, hl: i % 2 === 1 }); }));
+  const lines = [[]]; let lw = 0;
+  for (const wd of words) {
+    ctx.font = `${wd.hl ? 800 : weight} ${size}px ${FONT}`;
+    const ww = ctx.measureText(wd.w).width;
+    if (/^\s+$/.test(wd.w)) { if (lines[lines.length - 1].length) { lines[lines.length - 1].push({ ...wd, ww }); lw += ww; } continue; }
+    if (lw + ww > maxW && lines[lines.length - 1].length) {
+      const L = lines[lines.length - 1]; while (L.length && /^\s+$/.test(L[L.length - 1].w)) L.pop();
+      lines.push([]); lw = 0;
+    }
+    lines[lines.length - 1].push({ ...wd, ww }); lw += ww;
+  }
+  return lines.map(L => ({ L, width: L.reduce((s, q) => s + q.ww, 0) }));
+}
+function drawRich(lines, x, y, size, lineH, o = {}) {
+  lines.forEach((ln, i) => {
+    let cx = o.align === 'center' ? x - ln.width / 2 : x;
+    for (const q of ln.L) {
+      ctx.font = `${q.hl ? 800 : (o.weight || 600)} ${size}px ${FONT}`;
+      ctx.fillStyle = q.hl ? (o.hl || ACCENT) : (o.color || INK);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(q.w, cx, y + i * lineH);
+      cx += q.ww;
+    }
+  });
+}
+function caption(list, t) {
+  let cur = null;
+  for (const c of list) if (t >= c[0]) cur = c;
+  if (!cur) return;
+  const a = clamp((t - cur[0]) / .35);
+  ctx.save();
+  ctx.fillStyle = 'rgba(5,9,18,.82)';
+  ctx.beginPath(); ctx.roundRect(60, 878, 1800, 172, 22); ctx.fill();
+  ctx.fillStyle = ACCENT; ctx.beginPath(); ctx.roundRect(60, 878, 8, 172, 4); ctx.fill();
+  ctx.globalAlpha = a;
+  const lines = richWrap(cur[1], 1700, 40);
+  const lh = 54, y0 = 964 - (lines.length - 1) * lh / 2;
+  ctx.translate(0, (1 - a) * 10);
+  drawRich(lines, 110, y0, 40, lh);
+  ctx.restore();
+}
+function header(num, title, sub, a = 1) {
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = ACCENT; ctx.font = `800 26px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(num, 64, 92);
+  const nw = ctx.measureText(num).width;
+  ctx.fillStyle = INK; ctx.font = `800 52px ${FONT}`; ctx.fillText(title, 64 + nw + 22, 96);
+  if (sub) { ctx.fillStyle = MUTED; ctx.font = `600 24px ${FONT}`; ctx.fillText(sub, 66, 140); }
+  ctx.restore();
+}
+const PX = 1344, PY = 196, PW = 532, PH = 648;
+function panelBox(a = 1, y = PY, h = PH) {
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = '#121c30'; ctx.beginPath(); ctx.roundRect(PX, y, PW, h, 20); ctx.fill();
+  ctx.strokeStyle = '#22314f'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+}
+// items: [{t, text, color?}]
+function panelList(title, items, t, o = {}) {
+  const a = o.alpha ?? 1; if (a <= 0) return;
+  const y = o.y ?? PY, h = o.h ?? PH;
+  if (!o.noBox) panelBox(a, y, h);
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = o.titleColor || ACCENT; ctx.font = `800 24px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(title.toUpperCase(), PX + 32, y + 42);
+  let yy = y + 92;
+  const size = o.size || 27, lh = size * 1.3;
+  for (const it of items) {
+    const ia = clamp((t - it.t) / .35);
+    const lines = richWrap(it.text, PW - 104, size, 600);
+    if (ia > 0) {
+      ctx.save(); ctx.globalAlpha = a * ia * (o.focus !== undefined && o.focus !== it ? .45 : 1);
+      ctx.translate((1 - ia) * 18, 0);
+      ctx.fillStyle = it.color || ACCENT;
+      ctx.beginPath(); ctx.arc(PX + 44, yy + 1, it.color ? 9 : 6, 0, 7); ctx.fill();
+      if (it.icon) { labelAt(it.icon, PX + 44, yy + 1, { size: 18, weight: 800, color: it.iconColor || '#0b1220' }); }
+      drawRich(lines, PX + 70, yy, size, lh, { hl: o.hl });
+      ctx.restore();
+    }
+    yy += lines.length * lh + (o.gap ?? 22);
+  }
+  ctx.restore();
+}
+function legend(y, a = 1) {
+  ctx.save(); ctx.globalAlpha = a;
+  const roles = ['S', 'OH', 'MB', 'OPP', 'L'];
+  ctx.fillStyle = MUTED; ctx.font = `800 18px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('ROLES', PX + 32, y);
+  roles.forEach((r, i) => {
+    const yy = y + 40 + i * 40;
+    ctx.fillStyle = ROLE[r]; ctx.beginPath(); ctx.arc(PX + 50, yy, 15, 0, 7); ctx.fill();
+    ctx.fillStyle = '#0b1220'; ctx.font = `800 ${r.length > 2 ? 10 : 12}px ${FONT}`; ctx.textAlign = 'center';
+    ctx.fillText(r, PX + 50, yy + 1);
+    ctx.fillStyle = INK; ctx.font = `600 22px ${FONT}`; ctx.textAlign = 'left';
+    ctx.fillText(ROLE_NAME[r], PX + 80, yy + 1);
+  });
+  ctx.restore();
+}
+function scoreboard(sa, sb, server, a = 1, y = PY) {
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = '#121c30'; ctx.beginPath(); ctx.roundRect(PX, y, PW, 96, 20); ctx.fill();
+  ctx.strokeStyle = '#22314f'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.textBaseline = 'middle'; ctx.font = `800 24px ${FONT}`;
+  ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.fillText('TEAM A', PX + 30, y + 48);
+  ctx.textAlign = 'right'; ctx.fillText('TEAM B', PX + PW - 30, y + 48);
+  ctx.font = `800 52px ${FONT}`; ctx.textAlign = 'center';
+  ctx.fillText(`${sa}`, PX + PW / 2 - 50, y + 50); ctx.fillText(`${sb}`, PX + PW / 2 + 50, y + 50);
+  ctx.fillStyle = MUTED; ctx.fillText('–', PX + PW / 2, y + 48);
+  // serve indicator
+  ctx.fillStyle = '#ffe066';
+  const sx = server === 'A' ? PX + 150 : PX + PW - 150;
+  ctx.beginPath(); ctx.arc(sx, y + 48, 9, 0, 7); ctx.fill();
+  ctx.fillStyle = MUTED; ctx.font = `700 13px ${FONT}`; ctx.fillText('SERVE', sx, y + 74);
+  ctx.restore();
+}
+function touchCard(cs, t, y, a = 1) {
+  let cur = null;
+  for (const c of cs) if (c.card && t >= c.t) cur = c;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = '#121c30'; ctx.beginPath(); ctx.roundRect(PX, y, PW, 170, 20); ctx.fill();
+  ctx.strokeStyle = '#22314f'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  ctx.fillStyle = MUTED; ctx.font = `800 18px ${FONT}`; ctx.fillText('BALL', PX + 32, y + 34);
+  if (cur) {
+    const age = t - cur.t, k = clamp(age / .25);
+    ctx.globalAlpha = a * k;
+    ctx.fillStyle = cur.cardColor || INK; ctx.font = `800 34px ${FONT}`;
+    ctx.fillText(cur.card, PX + 32, y + 82);
+    if (cur.team && cur.touch !== undefined) {
+      ctx.fillStyle = MUTED; ctx.font = `700 20px ${FONT}`;
+      ctx.fillText(`TEAM ${cur.team} TOUCHES`, PX + 32, y + 132);
+      for (let i = 0; i < 3; i++) {
+        const cx = PX + 300 + i * 52;
+        ctx.beginPath(); ctx.arc(cx, y + 132, 17, 0, 7);
+        if (i < cur.touch) { ctx.fillStyle = ACCENT; ctx.fill(); ctx.fillStyle = '#0b1220'; }
+        else { ctx.strokeStyle = '#3a4a6a'; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = '#3a4a6a'; }
+        ctx.font = `800 18px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText(i + 1, cx, y + 133); ctx.textAlign = 'left';
+      }
+    } else if (cur.note) {
+      ctx.fillStyle = MUTED; ctx.font = `700 20px ${FONT}`; ctx.fillText(cur.note, PX + 32, y + 132);
+    }
+  }
+  ctx.restore();
+}
+function bigCenterText(lines, a, y = 470) {
+  ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const [txt, size, color, dy] of lines) { ctx.font = `800 ${size}px ${FONT}`; ctx.fillStyle = color; ctx.fillText(txt, W / 2, y + dy); }
+  ctx.restore();
+}
+function slowMoTag(a) { labelAt('SLOW MOTION', px(0), py(-6) - 22, { alpha: a, size: 18, weight: 800, bg: '#ff5c5c', color: '#ffffff' }); }
+
+// ---------------------------------------------------------------------------
+// Rally contact builder
+// ---------------------------------------------------------------------------
+const KIND = {
+  serve: { card: 'SERVE', sfx: 'serve' },
+  pass:  { card: 'PASS', sfx: 'hit' },
+  dig:   { card: 'DIG', sfx: 'hit' },
+  set:   { card: 'SET', sfx: 'set' },
+  attack:{ card: 'ATTACK', sfx: 'spike' },
+  block: { card: 'BLOCK', sfx: 'block' },
+  land:  { sfx: 'floor' },
+  bounce:{},
+  fly:   {},
+};
+function C(t, p, h, kind, o = {}) {
+  const k = KIND[kind];
+  return Object.assign({ t, p, h, kind, card: k.card, sfx: k.sfx }, o);
+}
+
+// ---------------------------------------------------------------------------
+// Scenes
+// ---------------------------------------------------------------------------
+const scenes = [];
+function addScene(s) { s.sfx = s.sfx || []; scenes.push(s); return s; }
+function contactsSfx(cs, toScene) { return cs.filter(c => c.sfx).map(c => [toScene(c.t), c.sfx]); }
+
+// ---- 0. Title -------------------------------------------------------------
+addScene({
+  dur: 6.5,
+  draw(t) {
+    drawCourt({ alpha: .22 });
+    const b = rallyBall(this.cs, t);
+    drawBall(b, .9);
+    const a1 = clamp((t - .3) / .6), a2 = clamp((t - .9) / .6), a3 = clamp((t - 1.5) / .6);
+    ctx.save();
+    ctx.globalAlpha = a1; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = ACCENT; ctx.font = `800 30px ${FONT}`; ctx.fillText('A VISUAL GUIDE', W / 2, 330 - (1 - a1) * 20);
+    ctx.globalAlpha = a2; ctx.fillStyle = INK; ctx.font = `800 120px ${FONT}`;
+    ctx.fillText("WOMEN'S VOLLEYBALL", W / 2, 440 - (1 - a2) * 20);
+    ctx.globalAlpha = a3; ctx.fillStyle = INK; ctx.font = `600 44px ${FONT}`;
+    ctx.fillText('Rules & positions — explained through a game', W / 2, 545);
+    ctx.fillStyle = MUTED; ctx.font = `600 28px ${FONT}`;
+    ctx.fillText('Indoor  ·  6 vs 6  ·  International (FIVB) rules', W / 2, 610);
+    ctx.restore();
+    // role chips
+    ['S', 'OH', 'MB', 'OPP', 'L'].forEach((r, i) => {
+      const a = clamp((t - 2.2 - i * .15) / .4), x = W / 2 + (i - 2) * 90, y = 720;
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y); ctx.scale(.6 + .4 * a, .6 + .4 * a);
+      ctx.fillStyle = ROLE[r]; ctx.beginPath(); ctx.arc(0, 0, 30, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.fillStyle = '#0b1220'; ctx.font = `800 ${r.length > 2 ? 17 : 20}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(r, 0, 1);
+      ctx.restore();
+    });
+  },
+  cs: [C(0, [-12, 3], 1, 'fly', { peak: 6 }), C(1.6, [-3, 1], 0, 'bounce', { peak: 3.5, sfx: 'floor' }), C(2.8, [3, -1], 0, 'bounce', { peak: 1.6, sfx: 'floor' }), C(3.6, [6.5, -2], 0, 'bounce', { peak: .6, sfx: 'floor' }), C(4.1, [8.5, -2.6], 0, 'bounce')],
+});
+
+// ---- 1. The court -------------------------------------------------------------
+addScene({
+  dur: 16.5,
+  caps: [
+    [0.3, 'Indoor volleyball is played *6 vs 6* on a court *18 m long and 9 m wide*, split in half by a net.'],
+    [4.3, "Each team's half is a 9 × 9 m square. The *3-metre attack line* splits it into a front zone and a back zone."],
+    [8.6, "In women's volleyball the top of the net is *2.24 m* high — 19 cm lower than the men's net (2.43 m)."],
+    [12.6, 'The lines are part of the court: a ball that touches the line is *IN*. Land outside it and it is *OUT*.'],
+  ],
+  draw(t) {
+    header('01', 'The court', null, clamp(t / .5));
+    drawCourt({ lines: eio(clamp((t - .3) / 2.2)) });
+    const a1 = fadeWin(t, 2.4, 99), a2 = fadeWin(t, 4.4, 99);
+    dimLine(px(-9), py(-4.5) - 34, px(9), py(-4.5) - 34, '18 m', a1 * (1 - fadeWin(t, 8.5, 99)), { dy: 0 });
+    dimLine(px(9) + 40, py(-4.5), px(9) + 40, py(4.5), '9 m', a1 * (1 - fadeWin(t, 8.5, 99)));
+    labelAt('9 × 9 m', px(4.5), py(0), { alpha: a1 * (1 - a2) * .9, size: 56, weight: 800, color: 'rgba(255,255,255,.55)' });
+    labelAt('NET', px(0), py(-6) - 24, { alpha: a1, size: 20, weight: 800, color: '#ffffff', bg: '#0b1220' });
+    // attack zones
+    if (a2 > 0) {
+      ctx.save(); ctx.globalAlpha = a2 * (.6 + .4 * Math.sin(NOW * 3) ** 2);
+      ctx.fillStyle = 'rgba(255,212,59,.18)'; ctx.beginPath(); rectM(-3, -4.5, 3, 4.5); ctx.fill();
+      ctx.restore();
+      for (const s of [-1, 1]) {
+        labelAt('FRONT ZONE', px(s * 1.5), py(0), { alpha: a2, size: 22, weight: 800, rot: -Math.PI / 2, color: ACCENT });
+        labelAt('BACK ZONE', px(s * 6), py(0), { alpha: a2, size: 26, weight: 800, color: 'rgba(255,255,255,.7)' });
+        labelAt('3 m line', px(s * 3), py(4.5) + 52, { alpha: a2, size: 20, weight: 800, bg: '#0b1220' });
+        labelAt('service zone', px(s * 10.6), py(s * 2.4), { alpha: a2, size: 20, weight: 700, rot: -Math.PI / 2, color: MUTED });
+      }
+      dimLine(px(0), py(4.5) + 22, px(3), py(4.5) + 22, '', a2 * (1 - fadeWin(t, 8.5, 99)));
+    }
+    // side view of the net
+    const a3 = fadeWin(t, 8.6, 99);
+    if (a3 > 0) {
+      panelBox(a3);
+      ctx.save(); ctx.globalAlpha = a3;
+      labelAt('SIDE VIEW OF THE NET', PX + 32, PY + 42, { align: 'left', size: 22, weight: 800, color: ACCENT });
+      const g = PY + 570, s = 190, nx = PX + 300;
+      ctx.fillStyle = '#22598f'; ctx.fillRect(PX + 30, g, PW - 60, 14);
+      ctx.fillStyle = '#c9d2de'; ctx.fillRect(nx - 5, g - 2.55 * s, 10, 2.55 * s);
+      const top = g - 2.24 * s * eout(clamp((t - 8.8) / 1));
+      ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(nx - 3, top, 6, 1 * s);
+      ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1;
+      for (let i = 0; i < 10; i++) { ctx.beginPath(); ctx.moveTo(nx - 6, top + i * s / 10); ctx.lineTo(nx + 6, top + i * s / 10); ctx.stroke(); }
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(nx - 8, top - 4, 16, 9);
+      // women's height
+      ctx.strokeStyle = ACCENT; ctx.lineWidth = 3; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(nx - 150, top); ctx.lineTo(nx + 10, top); ctx.stroke();
+      dimLine(nx - 130, g, nx - 130, top, '', 1);
+      labelAt('2.24 m', nx - 130, (g + top) / 2, { size: 30, weight: 800, color: ACCENT, bg: '#121c30' });
+      labelAt('WOMEN', nx - 130, top - 26, { size: 18, weight: 800, color: ACCENT });
+      // men's height
+      const am = fadeWin(t, 10.2, 99), mt = g - 2.43 * s;
+      ctx.globalAlpha = a3 * am; ctx.strokeStyle = MUTED; ctx.setLineDash([8, 8]);
+      ctx.beginPath(); ctx.moveTo(nx - 10, mt); ctx.lineTo(nx + 170, mt); ctx.stroke(); ctx.setLineDash([]);
+      labelAt('men 2.43 m', nx + 100, mt - 22, { size: 20, weight: 700, color: MUTED, alpha: a3 * am });
+      ctx.globalAlpha = a3;
+      labelAt('net is 1 m deep', nx + 100, top + s * .55, { size: 18, weight: 600, color: MUTED });
+      ctx.restore();
+    }
+    // in / out demo
+    if (t > 12.6) {
+      drawBall(rallyBall(this.inCs, t)); drawBall(rallyBall(this.outCs, t));
+      drawPops(this.inCs, t); drawPops(this.outCs, t);
+    }
+    caption(this.caps, t);
+  },
+  inCs: [C(13.1, [-5, -1], 5, 'fly', { peak: 1 }), C(14.0, [-5, 4.5], 0, 'land', { pop: 'IN ✓', popColor: GOOD, peak: .3 }), C(14.4, [-5, 5.4], 0, 'bounce')],
+  outCs: [C(14.4, [5, 1], 5, 'fly', { peak: 1 }), C(15.3, [5.8, 4.95], 0, 'land', { pop: 'OUT ✕', popColor: BAD, peak: .3 }), C(15.7, [6.3, 5.7], 0, 'bounce')],
+});
+scenes[1].sfx.push([14.0, 'floor'], [15.3, 'floor']);
+
+// ---- 2. Zones -----------------------------------------------------------------
+addScene({
+  dur: 16,
+  caps: [
+    [0.3, 'Each team has *6 players on court*: 3 in the *front row* (near the net) and 3 in the *back row*.'],
+    [4.2, 'The six spots are numbered *1 to 6*. Zone 1 is the right-back — the spot the server comes from.'],
+    [8.2, "Front row: *4 · 3 · 2* (left to right). Back row: *5 · 6 · 1*. Left and right are as each team sees it, facing the net."],
+    [12.2, 'Only *front-row* players may block, or attack the ball from above the net inside the attack line.'],
+  ],
+  draw(t) {
+    header('02', 'Six players, six zones', null, clamp(t / .5));
+    drawCourt({ zones: (team, n) => team === 'A' ? clamp((t - 4.4 - (n - 1) * .35) / .3) * (1 - .6 * fadeWin(t, 8.8, 99)) : .2 * fadeWin(t, 8.0, 99) });
+    teamLabels(clamp((t - .3) / .5));
+    const fr = fadeWin(t, 1.0, 99), br = fadeWin(t, 2.2, 99);
+    ctx.save();
+    ctx.globalAlpha = fr * .9; ctx.fillStyle = 'rgba(255,212,59,.16)'; ctx.beginPath(); rectM(-3, -4.5, 0, 4.5); ctx.fill();
+    ctx.globalAlpha = br * .9; ctx.fillStyle = 'rgba(102,217,255,.12)'; ctx.beginPath(); rectM(-9, -4.5, -3, 4.5); ctx.fill();
+    ctx.restore();
+    labelAt('FRONT ROW', px(-1.5), py(-4.1), { alpha: fr, size: 20, weight: 800, color: ACCENT, bg: '#0b1220' });
+    labelAt('BACK ROW', px(-6), py(-4.1), { alpha: br, size: 20, weight: 800, color: '#66d9ff', bg: '#0b1220' });
+    // facing-the-net hint
+    const fa = fadeWin(t, 8.6, 99);
+    arrow(A(8.6, 0), A(4.4, 0), { alpha: fa * .0 });
+    labelAt('TEAM A faces this way  →', px(-6), py(4.5) + 34, { alpha: fa, size: 20, weight: 700, color: MUTED });
+    labelAt('←  TEAM B faces this way', px(6), py(4.5) + 34, { alpha: fa, size: 20, weight: 700, color: MUTED });
+    labelAt('LEFT', px(-1.5), py(-3), { alpha: fa * .0 });
+    // order arrows 1->6 (counter-clockwise numbering)
+    const oa = fadeWin(t, 5.0, 8.2);
+    for (let n = 1; n < 6; n++) arrow(AZ(n), AZ(n + 1), { alpha: oa * clamp((t - 4.4 - n * .35) / .3), color: 'rgba(255,255,255,.75)', width: 3, bend: 30, trim: 42 });
+    // neutral players
+    const pa = clamp((t - 9.0) / .5);
+    if (pa > 0) {
+      for (const n of [1, 2, 3, 4, 5, 6]) {
+        const [x, y] = AZ(n); const front = n >= 2 && n <= 4;
+        const hi = t > 12.2 ? (front ? 1 : 0) : 0;
+        drawPlayer({ role: 'N', team: 'A', label: '' + n }, [x + .0, y], pa * (t > 12.2 && !front ? .35 : 1), 0, hi, 0);
+      }
+    }
+    // server spot
+    const sa = fadeWin(t, 5.5, 8.5);
+    labelAt('server', px(-6.8), py(3) + 52, { alpha: sa, size: 20, weight: 800, color: ACCENT, bg: '#0b1220' });
+    // right panel
+    const pa2 = fadeWin(t, 4.2, 99);
+    panelList('Zone numbers', [
+      { t: 4.5, text: '*1* · right back — serves', color: '#66d9ff' },
+      { t: 4.85, text: '*2* · right front', color: ACCENT },
+      { t: 5.2, text: '*3* · middle front', color: ACCENT },
+      { t: 5.55, text: '*4* · left front', color: ACCENT },
+      { t: 5.9, text: '*5* · left back', color: '#66d9ff' },
+      { t: 6.25, text: '*6* · middle back', color: '#66d9ff' },
+      { t: 12.4, text: 'Front row: block & attack at the net' },
+      { t: 13.0, text: 'Back row: defend; attack only from behind the 3 m line' },
+    ], t, { alpha: pa2, size: 26, gap: 16 });
+    caption(this.caps, t);
+  },
+});
+
+// ---- 3. Roles -------------------------------------------------------------------
+{
+  const ROT = { aOPP: AZ(1), aOH2: AZ(2), aMB1: AZ(3), aS: AZ(4), aOH1: AZ(5), aMB2: AZ(6) };
+  const BENCH_A = [-5.4, 5.45];
+  const keys = {};
+  for (const [id, p] of Object.entries(ROT)) keys[id] = [[0, p]];
+  keys.aMB2 = [[0, AZ(6)], [34.2, AZ(6)], [36.2, [-4.4, 5.45]]];
+  keys.aL = [[0, BENCH_A], [34.4, BENCH_A], [36.4, AZ(6)]];
+  const cast = mkCast(keys);
+  const R = [
+    { role: 'S', t0: 3.6, t1: 9.6, name: 'SETTER', count: '×1',
+      areas: [['A', 0, 2.6, .3, 4.5]],
+      bullets: ['Takes the *2nd touch* almost every rally', 'Sets from the *right side* of the net', 'Runs to the net even from the back row', 'The "quarterback" — picks who attacks'] },
+    { role: 'OH', t0: 9.6, t1: 15.6, name: 'OUTSIDE HITTER', count: '×2',
+      areas: [['A', 0, 3, -4.5, -1.5], ['A', 4.5, 9, -4.5, -.5]],
+      bullets: ['Attacks from the *left* (zone 4)', 'Main *passer* with the libero', 'Plays all 6 rotations, front and back', 'Usually gets the most sets'] },
+    { role: 'MB', t0: 15.6, t1: 21.6, name: 'MIDDLE BLOCKER', count: '×2',
+      areas: [['A', 0, 3, -1.5, 1.5]],
+      bullets: ['Tall — *blocks* across the whole net', 'Hits fast *quick* sets in the middle', 'Swapped for the libero in the back row'] },
+    { role: 'OPP', t0: 21.6, t1: 27.6, name: 'OPPOSITE', count: '×1',
+      areas: [['A', 0, 9, 1.5, 4.5]],
+      bullets: ['Lines up *opposite the setter*', 'Big attacker on the *right* (zone 2)', 'Also attacks from the back row', 'Blocks the other team\'s outside hitter'] },
+    { role: 'L', t0: 34.0, t1: 42, name: 'LIBERO', count: '×1',
+      areas: [['A', 3, 9, -4.5, 4.5]],
+      bullets: ['*Different-colour* jersey', '*Back row only* — never blocks', 'Can\'t attack above net height', 'Can\'t serve (FIVB rules)', 'Comes in for the middle in the back row'] },
+  ];
+  addScene({
+    dur: 42,
+    caps: [
+      [0.3, 'Players also have *roles* — their job on the team. In this video every role has its own colour.'],
+      [3.8, 'The *SETTER (S)* is the playmaker. She takes the 2nd touch almost every rally and decides who attacks.'],
+      [9.8, 'Two *OUTSIDE HITTERS (OH)* attack from the left and are key passers when the other team serves.'],
+      [15.8, 'Two *MIDDLE BLOCKERS (MB)* — usually the tallest — block at the centre of the net and hit fast "quick" sets.'],
+      [21.8, "The *OPPOSITE (OPP)* lines up opposite the setter: a big hitter on the right who blocks the other team's outside hitter."],
+      [27.8, 'This line-up is a *5-1 system*: 5 hitters + 1 setter. Partners stand directly opposite each other: *S↔OPP, OH↔OH, MB↔MB*.'],
+      [31.0, 'So each row always has one setter-or-opposite, one outside hitter and one middle.'],
+      [34.2, 'The *LIBERO (L)* is the defensive specialist in a different jersey. She replaces the middle blocker in the back row.'],
+      [38.4, 'The libero can only play in the back row: no blocking, no attacking above the net, and no serving (FIVB).'],
+    ],
+    draw(t) {
+      header('03', 'Positions & roles', 'Team A — a typical 5-1 line-up', clamp(t / .5));
+      drawCourt({ zones: .12 });
+      teamLabels(1, 'A');
+      const cur = R.find(r => t >= r.t0 && t < r.t1);
+      // role area shading
+      for (const r of R) {
+        const a = fadeWin(t, r.t0 + .2, r.t1 - .1);
+        if (a <= 0) continue;
+        ctx.save(); ctx.globalAlpha = a * .32; ctx.fillStyle = ROLE[r.role];
+        for (const ar of r.areas) { ctx.beginPath(); rectTeam(...ar); ctx.fill(); }
+        ctx.restore();
+      }
+      // setter "runs to the net" arrow
+      arrow(AZ(4), A(1.0, 2.2), { alpha: fadeWin(t, 5.0, 9.5), color: ROLE.S, dash: true, width: 5, bend: -30 });
+      labelAt('moves here once the ball is served', px(-3.6), py(1.0), { alpha: fadeWin(t, 5.3, 9.5), size: 19, weight: 800, color: ROLE.S, stroke: true });
+      arrow(AZ(2), A(2.2, -3.2), { alpha: fadeWin(t, 11.0, 15.5), color: ROLE.OH, dash: true, width: 5, bend: -30 });
+      labelAt('switches to the left', px(-3.7), py(-1.0), { alpha: fadeWin(t, 11.3, 15.5), size: 19, weight: 800, color: ROLE.OH, stroke: true });
+      // 5-1 pair lines
+      const pa = fadeWin(t, 28.0, 34.0);
+      if (pa > 0) {
+        for (const [a, b, col] of [[1, 4, ROLE.OPP], [2, 5, ROLE.OH], [3, 6, ROLE.MB]]) {
+          const [x0, y0] = AZ(a), [x1, y1] = AZ(b);
+          ctx.save(); ctx.globalAlpha = pa; ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.setLineDash([14, 10]);
+          ctx.beginPath(); ctx.moveTo(px(x0), py(y0)); ctx.lineTo(px(x1), py(y1)); ctx.stroke(); ctx.restore();
+        }
+        ctx.save(); ctx.globalAlpha = pa; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(px(-4.3), py(0), 7, 0, 7); ctx.fill(); ctx.restore();
+      }
+      labelAt('BENCH', px(-4.9), py(5.45) + 32, { alpha: fadeWin(t, 33.6, 99), size: 16, weight: 800, color: MUTED });
+      drawCast(cast, t, {
+        alpha: p => cur ? (p.role === cur.role ? 1 : .28) : 1,
+        hi: p => cur && p.role === cur.role ? 1 : 0,
+      });
+      // panel
+      if (cur) {
+        const a = fadeWin(t, cur.t0, cur.t1);
+        panelBox(a);
+        ctx.save(); ctx.globalAlpha = a;
+        ctx.fillStyle = ROLE[cur.role]; ctx.beginPath(); ctx.arc(PX + 72, PY + 76, 40, 0, 7); ctx.fill();
+        ctx.fillStyle = '#0b1220'; ctx.font = `800 ${cur.role.length > 2 ? 22 : 28}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(cur.role, PX + 72, PY + 77);
+        ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = `800 32px ${FONT}`; ctx.fillText(cur.name, PX + 130, PY + 64);
+        ctx.fillStyle = MUTED; ctx.font = `700 20px ${FONT}`; ctx.fillText(`${cur.count} on court`, PX + 130, PY + 98);
+        ctx.restore();
+        panelList('', cur.bullets.map((b, i) => ({ t: cur.t0 + .4 + i * .5, text: b, color: ROLE[cur.role] })), t, { alpha: a, y: PY + 110, h: PH - 110, size: 27, gap: 20, noBox: true });
+      } else if (t >= 27.6 && t < 34.0) {
+        const a = fadeWin(t, 27.6, 34.0);
+        panelList('The 5-1 system', [
+          { t: 28.0, text: '*5* hitters + *1* setter', color: ACCENT },
+          { t: 28.6, text: '*S ↔ OPP* opposite each other', color: ROLE.OPP },
+          { t: 29.2, text: '*OH ↔ OH* opposite each other', color: ROLE.OH },
+          { t: 29.8, text: '*MB ↔ MB* opposite each other', color: ROLE.MB },
+          { t: 31.0, text: 'Every row always gets a balanced mix of roles' },
+        ], t, { alpha: a });
+      } else {
+        legend(PY + 30, fadeWin(t, .4, 3.6));
+      }
+      caption(this.caps, t);
+    },
+  });
+}
+
+// ---- 4. Scoring ---------------------------------------------------------------
+addScene({
+  dur: 15,
+  caps: [
+    [0.3, 'Scoring is *rally scoring*: every rally ends with a point for someone, whoever served.'],
+    [4.0, 'A set goes to *25 points*, but you must *win by 2*. At 24–24, play goes on until one team leads by two.'],
+    [9.6, 'A match is *best of 5 sets*. If it reaches 2–2, the deciding 5th set is played to *15* (still win by 2).'],
+  ],
+  draw(t) {
+    header('04', 'How you score', null, clamp(t / .5));
+    drawCourt({ alpha: .35 });
+    const steps = [[0, 0, 0, ''], [1.2, 1, 0, 'point A'], [2.2, 1, 1, 'point B'], [4.2, 24, 23, ''], [5.6, 24, 24, 'not over — must win by 2!'], [7.0, 25, 24, 'still not over...'], [8.2, 26, 24, 'SET TEAM A  (26–24)']];
+    let s = steps[0]; for (const q of steps) if (t >= q[0]) s = q;
+    const a = clamp((t - .3) / .4);
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(10,16,30,.92)'; ctx.beginPath(); ctx.roundRect(px(-8), py(-3.6), 16 * SC, 6.4 * SC, 28); ctx.fill();
+    ctx.strokeStyle = '#2a3b5e'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = MUTED; ctx.font = `800 26px ${FONT}`;
+    ctx.fillText(t < 9.6 ? 'SET 1' : 'MATCH — SETS WON', px(0), py(-2.9));
+    const pop = 1 + .2 * Math.max(0, 1 - (t - s[0]) / .25);
+    ctx.font = `800 40px ${FONT}`; ctx.fillStyle = INK;
+    ctx.fillText('TEAM A', px(-3.8), py(-1.8)); ctx.fillText('TEAM B', px(3.8), py(-1.8));
+    const [va, vb] = t < 9.6 ? [s[1], s[2]] : [Math.min(3, 1 + Math.floor(clamp((t - 10.2) / 1.2) * 2.99)), 2];
+    ctx.save(); ctx.translate(px(-3.8), py(.3)); ctx.scale(pop, pop); ctx.font = `800 130px ${FONT}`; ctx.fillText(va, 0, 0); ctx.restore();
+    ctx.save(); ctx.translate(px(3.8), py(.3)); ctx.scale(pop, pop); ctx.font = `800 130px ${FONT}`; ctx.fillText(vb, 0, 0); ctx.restore();
+    ctx.fillStyle = MUTED; ctx.font = `800 90px ${FONT}`; ctx.fillText('–', px(0), py(.2));
+    if (t < 9.6 && s[3]) { ctx.font = `800 30px ${FONT}`; ctx.fillStyle = s[3].startsWith('SET') ? GOOD : ACCENT; ctx.fillText(s[3], px(0), py(2.1)); }
+    if (t >= 9.6) { ctx.font = `800 30px ${FONT}`; ctx.fillStyle = t > 11.6 ? GOOD : ACCENT; ctx.fillText(t > 11.6 ? 'TEAM A WINS 3–2' : 'set 5 → first to 15', px(0), py(2.1)); }
+    ctx.restore();
+    panelList('Scoring rules', [
+      { t: .6, text: 'Every rally = *1 point*, no matter who served' },
+      { t: 4.2, text: 'Sets to *25*, win by *2* (e.g. 26–24, 31–29)' },
+      { t: 9.8, text: 'Match = *best of 5 sets*' },
+      { t: 10.4, text: 'Deciding 5th set to *15*, win by 2' },
+      { t: 12.4, text: 'Win a rally while receiving → you also *get the serve* (and rotate)' },
+    ], t);
+    caption(this.caps, t);
+  },
+});
+
+// ---- 5. Three touches -----------------------------------------------------------
+{
+  const keys = {
+    aS: A(1.0, 1.6), aMB1: A(1.4, 0), aOPP: A(6.3, 3), aOH1: A(6.3, -3), aL: A(6.3, 0),
+    aOH2: [[0, A(3.6, -3.4)], [4.2, A(3.6, -3.4)], [5.55, A(1.2, -3.0)], [7.5, A(1.3, -3.0)], [9, A(2.4, -3.2)]],
+  };
+  const cast = mkCast(keys, { aOH2: [[5.3, 5.95]] });
+  const cs = [
+    C(1.0, B(3.5, 1), 2.9, 'fly', { peak: 1.2 }),
+    C(2.4, A(6.3, -3), .8, 'pass', { team: 'A', touch: 1, pop: '1 · PASS', peak: 3.5 }),
+    C(4.0, A(1.0, 1.6), 2.6, 'set', { team: 'A', touch: 2, pop: '2 · SET', peak: 3.2 }),
+    C(5.6, A(1.2, -3.0), 3.1, 'attack', { team: 'A', touch: 3, pop: '3 · ATTACK', peak: .3 }),
+    C(6.05, B(5.5, -1.0), 0, 'land', { peak: .5 }),
+    C(6.6, B(8.2, -1.5), 0, 'bounce'),
+  ];
+  addScene({
+    dur: 15,
+    caps: [
+      [0.3, 'Each team gets *at most 3 touches* to send the ball back over the net — usually *pass, set, attack*.'],
+      [7.2, 'One player can\'t touch the ball *twice in a row*, and the ball can\'t be caught or thrown — only hit.'],
+      [11.0, 'Any body part is legal (even a foot!). And a *block* at the net does *not* count as one of your 3 touches.'],
+    ],
+    sfx: contactsSfx(cs, t => t),
+    draw(t) {
+      header('05', 'Three touches', null, clamp(t / .5));
+      drawCourt();
+      teamLabels(1);
+      // path trail
+      drawCast(cast, t);
+      drawBall(rallyBall(cs, t));
+      drawPops(cs, t);
+      touchCard(cs, t, PY);
+      panelList('Touch rules', [
+        { t: 1.0, text: 'Max *3 touches* per side' },
+        { t: 7.4, text: 'No player touches it *twice in a row*' },
+        { t: 8.2, text: 'No catching, holding or throwing' },
+        { t: 11.2, text: 'Any body part may hit the ball' },
+        { t: 12.0, text: 'A *block* doesn\'t count as a touch' },
+      ], t, { y: PY + 190, h: PH - 190, size: 26, gap: 18 });
+      caption(this.caps, t);
+    },
+  });
+}
+
+// ---- Game line-ups ---------------------------------------------------------------
+const ROT_A = { aOPP: 1, aOH2: 2, aMB1: 3, aS: 4, aOH1: 5, aL: 6 };
+const ROT_B = { bS: 1, bOH1: 2, bMB2: 3, bOPP: 4, bOH2: 5, bL: 6 };
+const SERVE_A = A(10.2, 2.5), SERVE_B = B(10.2, 2.5);
+
+// ---- 6. Line-up & overlap ------------------------------------------------------
+{
+  const keys = {};
+  for (const [id, n] of Object.entries(ROT_A)) keys[id] = [[0, AZ(n)]];
+  for (const [id, n] of Object.entries(ROT_B)) keys[id] = [[0, BZ(n)]];
+  keys.aOPP = [[0, AZ(1)], [12.8, AZ(1)], [14.8, SERVE_A]];
+  const cast = mkCast(keys);
+  addScene({
+    dur: 17, fadeOut: false,
+    caps: [
+      [0.3, 'Game time! *Team A serves, Team B receives.* Both teams start in their *rotation spots* (zones 1–6).'],
+      [4.2, 'Until the serve is hit, each front-row player must be *closer to the net* than the back-row player behind her...'],
+      [8.2, '...and the *left-to-right order* must be kept in each row. Breaking this is an *overlap* fault.'],
+      [12.2, 'The server is whoever stands in *zone 1*. She goes behind the end line and has *8 seconds* after the whistle to serve.'],
+    ],
+    sfx: [[16.3, 'whistle']],
+    draw(t) {
+      header('06', 'Line-up for the serve', 'Both liberos (green) are on court in place of a middle blocker', clamp(t / .5));
+      drawCourt({ zones: .16 });
+      teamLabels(1);
+      // overlap lines on B
+      const va = fadeWin(t, 4.4, 12.0), ha = fadeWin(t, 8.4, 12.0);
+      for (const [f, b] of [[4, 5], [3, 6], [2, 1]]) arrow(BZ(b), BZ(f), { alpha: va, color: ACCENT, width: 5, trim: 32 });
+      if (va > 0) labelAt('front ahead of back', px(4.3), py(4.5) + 34, { alpha: va, size: 20, weight: 800, color: ACCENT, bg: '#0b1220' });
+      for (const row of [[4, 3, 2], [5, 6, 1]]) for (let i = 0; i < 2; i++) arrow(BZ(row[i]), BZ(row[i + 1]), { alpha: ha, color: '#66d9ff', width: 4, trim: 32, dash: true });
+      if (ha > 0) labelAt('left → right order kept', px(4.3), py(-4.5) - 30, { alpha: ha, size: 20, weight: 800, color: '#66d9ff', bg: '#0b1220' });
+      drawCast(cast, t, { alpha: p => (t > 4.2 && t < 12.2 && p.team === 'A') ? .35 : 1, hi: p => (p.id === 'aOPP' && t > 12.2) ? 1 : 0 });
+      if (t > 12.6) drawBall({ x: posOf(cast, 'aOPP', t)[0] + .35, y: posOf(cast, 'aOPP', t)[1] - .3, h: .9 }, clamp((t - 12.6) / .4));
+      labelAt('8 sec', px(-10.2), py(2.5) - 66, { alpha: fadeWin(t, 15.0, 99), size: 22, weight: 800, color: ACCENT, bg: '#0b1220' });
+      scoreboard(0, 0, 'A');
+      legend(PY + 130, 1);
+      panelList('Before the serve', [
+        { t: 4.4, text: 'Stay in rotation order' },
+        { t: 12.4, text: 'Zone 1 serves, from behind the end line' },
+      ], t, { y: PY + 380, h: PH - 380, size: 24, gap: 14 });
+      caption(this.caps, t);
+    },
+  });
+}
+
+// ---- 7. Rally 1 -----------------------------------------------------------------
+{
+  const o = .6, k = 2.2, toScene = s => o + s * k, toSim = t => (t - o) / k;
+  const keys = {
+    aOPP: [[0, SERVE_A], [.3, A(9.9, 2.5)], [2.2, A(6.5, 3)]],
+    aS:   [[0, AZ(4)], [.2, AZ(4)], [1.6, A(1.6, 2.0)], [3.4, A(1.1, 2.0)], [4.0, A(.45, 3.0)], [4.8, A(.5, 3.0)], [6.9, A(1.0, 1.6)]],
+    aMB1: [[0, AZ(3)], [.1, AZ(3)], [.8, A(1.1, 0)], [3.4, A(1.1, 0)], [4.0, A(.45, 2.2)], [4.8, A(.5, 2.2)], [6.2, A(1.5, .3)]],
+    aOH2: [[0, AZ(2)], [.2, AZ(2)], [1.0, A(3.0, .3), 'w'], [1.9, A(2.4, -3.2)], [5.0, A(2.4, -3.2)], [6.6, A(3.6, -3.5)], [7.0, A(3.6, -3.5)], [8.5, A(1.2, -3.0)], [10, A(1.4, -3.0)]],
+    aOH1: [[0, AZ(5)], [1.5, A(6.3, -3)]],
+    aL:   [[0, AZ(6)], [1.5, A(6.3, 0)], [4.3, A(6.3, 0)], [5.7, A(4.9, .8)], [7.2, A(5.6, .2)]],
+    bS:   [[0, BZ(1)], [.1, BZ(1)], [2.4, B(.95, 1.2)], [4.6, B(.95, 1.2)], [5.6, B(1.6, 1.2)]],
+    bOPP: [[0, BZ(4)], [.2, BZ(4)], [1.0, B(2.8, -.3), 'w'], [1.9, B(2.2, 3.0)], [7.6, B(2.2, 3.0)], [8.3, B(.45, 2.9)], [10, B(.6, 2.9)]],
+    bOH1: [[0, BZ(2)], [.2, BZ(2)], [1.0, B(3.6, .8), 'w'], [2.0, B(3.8, -3.3)], [2.9, B(3.8, -3.3)], [4.2, B(1.3, -3.0)], [5.5, B(2.6, -3.0)]],
+    bMB2: [[0, BZ(3)], [.3, BZ(3)], [1.6, B(3.2, .3)], [2.2, B(3.2, .3)], [2.75, B(1.1, .4)], [4.5, B(1.1, .4)], [5.4, B(1.5, .8)], [7.7, B(1.5, .8)], [8.45, B(.5, 2.1)]],
+    bOH2: [[0, BZ(5)], [1.0, B(6.4, -2.8)], [4.4, B(6.4, -2.8)], [5.6, B(5.8, -2.6)]],
+    bL:   [[0, BZ(6)], [.3, BZ(6)], [1.5, B(6.5, .3)], [3.0, B(6.3, 0)], [5.6, B(6.5, .8)], [8.65, B(6.5, .8)], [9.15, B(5.4, 1.8)]],
+  };
+  const cast = mkCast(keys, {
+    aS: [[4.05, 4.65]], aMB1: [[4.05, 4.65]], aOH2: [[8.25, 8.9]], aOPP: [[-.15, .25]],
+    bOH1: [[3.95, 4.6]], bMB2: [[2.65, 3.2]], bOPP: [[8.35, 8.95]], bMB2_: [],
+  });
+  cast.find(p => p.id === 'bMB2').jumps.push([8.5, 9.0]);
+  const cs = [
+    C(0, A(10.0, 2.5), 2.8, 'serve', { team: 'A', card: 'SERVE · TEAM A', pop: 'SERVE', peak: 2.2 }),
+    C(1.6, B(6.5, .3), .8, 'pass', { team: 'B', touch: 1, pop: 'PASS', peak: 3.5 }),
+    C(2.9, B(.95, 1.2), 2.6, 'set', { team: 'B', touch: 2, pop: 'SET', peak: 3.5 }),
+    C(4.3, B(1.3, -3.0), 3.1, 'attack', { team: 'B', touch: 3, pop: 'ATTACK', peak: 0 }),
+    C(4.42, [-.15, 2.7], 2.7, 'block', { pop: 'BLOCK', popDy: 150, popDx: -40, card: 'BLOCK', note: "Team A's block — not a touch", cardColor: ACCENT, peak: 2.5 }),
+    C(5.9, A(4.9, .8), .6, 'dig', { team: 'A', touch: 1, pop: 'DIG', peak: 4 }),
+    C(7.2, A(1.0, 1.6), 2.6, 'set', { team: 'A', touch: 2, pop: 'SET', peak: 3.5 }),
+    C(8.6, A(1.2, -3.0), 3.1, 'attack', { team: 'A', touch: 3, pop: 'ATTACK', peak: .3 }),
+    C(9.05, B(5.0, 2.2), 0, 'land', { pop: 'KILL!', popColor: GOOD, card: 'POINT TEAM A', cardColor: GOOD, note: 'Ball landed in Team B\'s court', peak: .5 }),
+    C(9.6, B(7.2, 3.0), 0, 'bounce'),
+  ];
+  const caps = [
+    [-.25, "Whistle — Team A's opposite serves. The instant the ball is hit, everyone leaves her rotation spot for her *specialty spot*."],
+    [1.5, 'Touch 1 — the *PASS*. Team B\'s libero "bumps" the serve up to her setter.'],
+    [2.85, 'Touch 2 — the *SET*. B\'s setter ran in from the back row; her middle jumps early as a decoy...'],
+    [4.2, "...Touch 3 — the *ATTACK* from the left. Team A blocks it, and a *block doesn't count* as one of A's touches."],
+    [5.8, "Touch 1 — the *DIG*. Team A's libero keeps the ball alive."],
+    [7.1, 'Touch 2 — Team A\'s setter lands, turns and *sets* her outside hitter on the left.'],
+    [8.55, "Touch 3 — *KILL!* The ball hits the floor inside Team B's court."],
+    [9.7, 'Point Team A (1–0). They won it while *serving*, so the same player serves again — *no rotation*.'],
+  ].map(([s, txt]) => [toScene(s), txt]);
+  addScene({
+    dur: toScene(12.2), fadeIn: false,
+    caps,
+    sfx: contactsSfx(cs, toScene).concat([[toScene(9.5), 'whistle']]),
+    draw(t) {
+      const st = toSim(t);
+      header('07', 'A rally, touch by touch', 'Team A serves  ·  Team B receives', 1);
+      drawCourt({ zones: .12 });
+      teamLabels(1);
+      slowMoTag(fadeWin(t, .3, toScene(9.3)));
+      // specialty-switch arrows right after the serve
+      const sw = fadeWin(t, toScene(-.1), toScene(1.6));
+      for (const [id, to, bend] of [['aS', A(1.6, 2.0), 30], ['aOH2', A(2.4, -3.2), -30], ['bS', B(.95, 1.2), 0], ['bOPP', B(2.2, 3.0), 30], ['bOH1', B(3.8, -3.3), -30]]) {
+        const p = cast.find(q => q.id === id);
+        arrow(p.keys[0][1], to, { alpha: sw * .85, color: ROLE[p.role], dash: true, width: 4, bend });
+      }
+      drawCast(cast, st);
+      drawBall(cs[0].t > st ? { x: SERVE_A[0] + .35, y: SERVE_A[1] - .3, h: .9 } : rallyBall(cs, st));
+      drawPops(cs, st);
+      scoreboard(st >= 9.05 ? 1 : 0, 0, 'A');
+      touchCard(cs, st, PY + 116);
+      legend(PY + 316, 1);
+      caption(caps, t);
+    },
+  });
+}
+
+// ---- 8. Rally 2: side-out and rotation ---------------------------------------
+{
+  const o = 1.2, k = 2.2, toScene = s => o + s * k, toSim = t => (t - o) / k;
+  const R0 = 12.4;
+  const s = toSim;
+  const keys = {
+    aOPP: [[0, SERVE_A], [.3, A(9.9, 2.5)], [2.2, A(6.5, 3)], [s(R0), A(6.5, 3)], [s(R0 + 2), AZ(1)]],
+    aS:   [[0, AZ(4)], [.2, AZ(4)], [1.6, A(1.6, 2.0)], [3.0, A(1.0, 2.0)], [s(R0), A(1.0, 2.0)], [s(R0 + 2), AZ(4)]],
+    aMB1: [[0, AZ(3)], [.1, AZ(3)], [.8, A(1.1, 0)], [2.9, A(1.1, 0)], [3.25, A(.55, .3)], [s(R0), A(.55, .3)], [s(R0 + 2), AZ(3)]],
+    aOH2: [[0, AZ(2)], [.2, AZ(2)], [1.0, A(3.0, .3), 'w'], [1.9, A(2.4, -3.2)], [s(R0), A(2.4, -3.2)], [s(R0 + .3), A(3.0, -.3), 'w'], [s(R0 + 2), AZ(2)]],
+    aOH1: [[0, AZ(5)], [1.5, A(6.3, -3)], [3.3, A(6.3, -3)], [3.8, A(4.4, -2.0)], [s(R0), A(4.4, -2.0)], [s(R0 + 2), AZ(5)]],
+    aL:   [[0, AZ(6)], [1.5, A(6.3, 0)], [s(R0), A(6.3, 0)], [s(R0 + 2), AZ(6)]],
+    bS:   [[0, BZ(1)], [.1, BZ(1)], [2.4, B(.95, 1.2)], [s(R0), B(.95, 1.2)], [s(R0 + 2), BZ(1)], [s(R0 + 5), BZ(1)], [s(R0 + 7.5), BZ(6)]],
+    bOPP: [[0, BZ(4)], [.2, BZ(4)], [1.0, B(2.8, -.3), 'w'], [1.9, B(2.2, 3.0)], [s(R0), B(2.2, 3.0)], [s(R0 + .4), B(2.8, .2), 'w'], [s(R0 + 2), BZ(4)], [s(R0 + 5), BZ(4)], [s(R0 + 7.5), BZ(3)]],
+    bOH1: [[0, BZ(2)], [.2, BZ(2)], [1.0, B(3.6, .8), 'w'], [2.0, B(3.8, -3.3)], [2.6, B(3.8, -3.3)], [3.4, B(2.6, -3.0)], [s(R0), B(2.6, -3.0)], [s(R0 + .4), B(3.2, -.6), 'w'], [s(R0 + 2), BZ(2)], [s(R0 + 5), BZ(2)], [s(R0 + 7.5), BZ(1)], [s(R0 + 9), BZ(1)], [s(R0 + 11), SERVE_B]],
+    bMB2: [[0, BZ(3)], [.3, BZ(3)], [1.6, B(3.0, .3)], [2.5, B(3.0, .3)], [3.15, B(.8, .4)], [s(R0), B(.8, .4)], [s(R0 + 2), BZ(3)], [s(R0 + 5), BZ(3)], [s(R0 + 7.5), BZ(2)]],
+    bOH2: [[0, BZ(5)], [1.5, B(6.4, -2.6)], [3.0, B(5.8, -2.6)], [s(R0), B(5.8, -2.6)], [s(R0 + 2), BZ(5)], [s(R0 + 5), BZ(5)], [s(R0 + 7.5), BZ(4)]],
+    bL:   [[0, BZ(6)], [.3, BZ(6)], [1.5, B(6.4, .2)], [s(R0), B(6.4, .2)], [s(R0 + 2), BZ(6)], [s(R0 + 5), BZ(6)], [s(R0 + 7.5), BZ(5)]],
+  };
+  const cast = mkCast(keys, { bMB2: [[2.95, 3.5]], aMB1: [[3.3, 3.8]], aOPP: [[-.15, .25]] });
+  const cs = [
+    C(0, A(10.0, 2.5), 2.8, 'serve', { team: 'A', card: 'SERVE · TEAM A', pop: 'SERVE', peak: 2.2 }),
+    C(1.6, B(6.4, -2.6), .8, 'pass', { team: 'B', touch: 1, pop: 'PASS', peak: 3.5 }),
+    C(2.9, B(.95, 1.2), 2.6, 'set', { team: 'B', touch: 2, pop: 'QUICK SET', popDy: -40, peak: .3 }),
+    C(3.25, B(.8, .4), 3.0, 'attack', { team: 'B', touch: 3, pop: 'QUICK ATTACK', popDy: 150, popDx: -60, peak: 0 }),
+    C(3.6, A(3.4, -1.6), 0, 'land', { pop: 'KILL!', popColor: GOOD, card: 'POINT TEAM B', cardColor: GOOD, note: 'Side-out: Team B wins the serve', peak: .4 }),
+    C(4.1, A(5.4, -2.4), 0, 'bounce'),
+  ];
+  const caps = [
+    [.2, 'Rally 2 — Team A serves again. This time, watch Team B\'s *middle blocker*.'],
+    [toScene(1.5), "*PASS* by Team B's outside hitter. The setter is already at the net, and the middle is already running in..."],
+    [toScene(2.85), '...a low, fast *QUICK SET* — the middle hits it while A\'s blockers are still getting there.'],
+    [toScene(3.6), "*Kill!* Team A's middle blocker was too late. Point Team B — 1–1."],
+    [R0, 'Team B won a rally on Team A\'s serve. That\'s a *SIDE-OUT*: B wins the point *and* the serve...'],
+    [R0 + 4.6, '...and B must first *rotate one spot clockwise*: 2→1, 1→6, 6→5, 5→4, 4→3, 3→2.'],
+    [R0 + 8.8, "B's OH1 has rotated into *zone 1*, so she's the new server. Team A doesn't rotate — they didn't win the serve."],
+  ];
+  addScene({
+    dur: R0 + 13.5,
+    caps,
+    sfx: contactsSfx(cs, toScene).concat([[toScene(-.35), 'whistle'], [toScene(4.0), 'whistle']]),
+    draw(t) {
+      const st = toSim(t);
+      header('08', 'Side-out & rotation', 'Rally 2 — and what happens when the receiving team wins', clamp(t / .5));
+      drawCourt({ zones: t > R0 + 2 ? fadeWin(t, R0 + 2, R0 + 9) * .5 + .12 : .12 });
+      teamLabels(1);
+      slowMoTag(fadeWin(t, .6, toScene(3.9)));
+      // rotation arrows
+      const ra = fadeWin(t, R0 + 4.4, R0 + 8.6);
+      for (const n of [1, 2, 3, 4, 5, 6]) arrow(BZ(n), BZ(NEXT[n]), { alpha: ra, color: ACCENT, width: 5, bend: -22, trim: 34, prog: eio(clamp((t - R0 + -4.4) / .8)) });
+      if (ra > 0) {
+        ctx.save(); ctx.globalAlpha = ra; ctx.strokeStyle = 'rgba(255,212,59,.5)'; ctx.lineWidth = 6;
+        const cx = px(4.3), cy = py(0), rr = 70, a0 = NOW * 2;
+        ctx.beginPath(); ctx.arc(cx, cy, rr, a0, a0 + 4.8); ctx.stroke();
+        const ea = a0 + 4.8, ex = cx + Math.cos(ea) * rr, ey = cy + Math.sin(ea) * rr, tang = ea + Math.PI / 2;
+        ctx.fillStyle = 'rgba(255,212,59,.8)'; ctx.beginPath();
+        ctx.moveTo(ex + Math.cos(tang) * 16, ey + Math.sin(tang) * 16);
+        ctx.lineTo(ex + Math.cos(ea) * 14, ey + Math.sin(ea) * 14); ctx.lineTo(ex - Math.cos(ea) * 14, ey - Math.sin(ea) * 14); ctx.fill();
+        ctx.restore();
+        labelAt('CLOCKWISE', px(4.3), py(0), { alpha: ra, size: 20, weight: 800, color: ACCENT, stroke: true });
+      }
+      drawCast(cast, st, { hi: p => (p.id === 'bOH1' && t > R0 + 8.6) || (p.id === 'bMB2' && t > toScene(2.2) && t < toScene(4.2)) ? 1 : 0 });
+      let ball;
+      if (st < 0) ball = { x: SERVE_A[0] + .35, y: SERVE_A[1] - .3, h: .9 };
+      else if (t < R0 + .5) ball = rallyBall(cs, st);
+      if (ball) drawBall(ball, t < R0 ? 1 : clamp((R0 + .5 - t) / .5));
+      if (t > R0 + 9.4) { const q = posOf(cast, 'bOH1', st); drawBall({ x: q[0] - .35, y: q[1] + .3, h: .9 }, clamp((t - R0 - 9.4) / .4)); }
+      drawPops(cs, st);
+      const sb = st >= 3.6 ? 1 : 0;
+      scoreboard(1, sb, sb ? 'B' : 'A');
+      touchCard(cs, st, PY + 116);
+      legend(PY + 316, 1);
+      caption(caps, t);
+    },
+  });
+}
+
+// ---- 9. Libero swaps ---------------------------------------------------------
+{
+  const BL = [5.2, 5.45], BM = [6.3, 5.45];
+  const keys = {
+    bOH1: [[0, BZ(1)], [2.6, BZ(1)], [5.0, BZ(6)]],
+    bMB2: [[0, BZ(2)], [2.6, BZ(2)], [5.0, BZ(1)], [9.2, BZ(1)], [10.6, SERVE_B], [12.0, SERVE_B], [13.4, BZ(1)], [13.6, BZ(1)], [15.4, BM]],
+    bOPP: [[0, BZ(3)], [2.6, BZ(3)], [5.0, BZ(2)]],
+    bOH2: [[0, BZ(4)], [2.6, BZ(4)], [5.0, BZ(3)]],
+    bL:   [[0, BZ(5)], [2.6, BZ(5)], [5.0, BZ(4)], [6.6, BZ(4)], [8.6, BL], [13.6, BL], [15.4, BZ(1)]],
+    bS:   [[0, BZ(6)], [2.6, BZ(6)], [5.0, BZ(5)]],
+    bMB1: [[0, BM], [7.0, BM], [8.9, BZ(4)]],
+  };
+  const cast = mkCast(keys, { bMB2: [[11.1, 11.5]] });
+  const serve = [C(11.3, B(10.0, 2.5), 2.8, 'serve', { pop: 'SERVE', peak: 2.2 }), C(12.9, A(6.5, .5), .8, 'fly')];
+  addScene({
+    dur: 18,
+    caps: [
+      [0.3, "The *libero* (green) plays only in the back row. Here she's in zone 5, in place of *MB1*, who waits on the sideline."],
+      [2.8, 'Team B rotates clockwise... and the libero\'s spot moves to *zone 4 — the front row*.'],
+      [5.4, '*Not allowed!* The libero goes off and *MB1 comes back in*. These swaps are unlimited and aren\'t substitutions.'],
+      [9.2, 'Now *MB2* is in zone 1 — her turn to *serve*. (Under FIVB rules the libero can\'t serve.)'],
+      [13.4, 'After that rally the libero replaces MB2. Rule of thumb: the libero plays for *whichever middle is in the back row*.'],
+    ],
+    sfx: [[11.3, 'serve']],
+    draw(t) {
+      header('09', 'The libero swap', 'Team B', clamp(t / .5));
+      drawCourt({ zones: (team) => team === 'B' ? .35 : 0 });
+      teamLabels(1, 'B');
+      ctx.save(); ctx.globalAlpha = .5; ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.roundRect(px(3.2), py(4.85), 5.6 * SC, 1.15 * SC, 10); ctx.fill(); ctx.restore();
+      labelAt('swap zone', px(3.0), py(5.42), { size: 18, weight: 800, color: MUTED, align: 'right' });
+      const ra = fadeWin(t, 2.6, 5.0);
+      for (const n of [1, 2, 3, 4, 5, 6]) arrow(BZ(n), BZ(NEXT[n]), { alpha: ra * .9, color: ACCENT, width: 4, bend: -22, trim: 34 });
+      arrow(BZ(4), BL, { alpha: fadeWin(t, 6.2, 8.6) * .9, color: ROLE.L, dash: true, bend: 20 });
+      arrow(BM, BZ(4), { alpha: fadeWin(t, 6.6, 8.9) * .9, color: ROLE.MB, dash: true, bend: 20 });
+      arrow(BL, BZ(1), { alpha: fadeWin(t, 13.4, 15.4) * .9, color: ROLE.L, dash: true, bend: -30 });
+      drawCast(cast, t, {
+        flag: p => p.id === 'bL' ? fadeWin(t, 5.0, 6.8) : 0,
+        hi: p => (p.id === 'bMB1' && t > 6.6 && t < 9.2) || (p.id === 'bMB2' && t > 9.2 && t < 12.2) || (p.id === 'bL' && (t < 2.6 || t > 14)) ? 1 : 0,
+      });
+      if (t > 5.0 && t < 6.8) { const q = posOf(cast, 'bL', t); labelAt('✕  front row!', px(q[0]), py(q[1]) - 52, { alpha: fadeWin(t, 5.0, 6.8), size: 24, weight: 800, color: BAD, stroke: true }); }
+      if (t > 9.6 && t < 11.3) { const q = posOf(cast, 'bMB2', t); drawBall({ x: q[0] - .35, y: q[1] + .3, h: .9 }); }
+      if (t >= 11.3) drawBall(rallyBall(serve, t), clamp((13.0 - t) / .3));
+      drawPops(serve, t);
+      panelList('Libero rules', [
+        { t: .6, text: '*Contrasting* jersey colour', color: ROLE.L },
+        { t: 1.2, text: 'Plays *back row only*', color: ROLE.L },
+        { t: 1.8, text: 'Can\'t block or attack above the net', color: ROLE.L },
+        { t: 9.4, text: 'Can\'t serve (FIVB; some leagues allow it)', color: ROLE.L },
+        { t: 5.8, text: 'Swaps are *unlimited* and happen between rallies', color: ROLE.L },
+        { t: 13.6, text: 'Usually replaces the *middle blockers*', color: ROLE.L },
+      ], t, { size: 26, gap: 18 });
+      caption(this.caps, t);
+    },
+  });
+}
+
+// ---- 10. Back-row attack & faults -----------------------------------------
+{
+  const keys = {
+    aS: A(1.0, 1.6), aMB1: A(1.4, 0), aOH2: A(2.4, -3.2), aOH1: A(6.3, -3), aL: A(6.3, 0),
+    aOPP: [[0, A(6.5, 2.8)], [2.1, A(6.5, 2.8)], [3.6, A(3.7, 2.6)], [4.4, A(3.1, 2.6)], [5.8, A(3.1, 2.6)], [7.3, A(6.5, 2.8)], [8.7, A(6.5, 2.8)], [10.2, A(2.3, 2.6)], [11.0, A(1.8, 2.6)], [13, A(1.8, 2.6)], [14.5, A(6.5, 2.8)]],
+  };
+  const cast = mkCast(keys, { aOPP: [[3.5, 4.2], [10.1, 10.8]] });
+  const mk = (t0, x, ok) => [
+    C(t0, B(4, -.5), 2.8, 'fly', { peak: 1 }),
+    C(t0 + .9, A(6.3, 0), .8, 'pass', { team: 'A', touch: 1, pop: 'PASS', peak: 3.5 }),
+    C(t0 + 2.1, A(1.0, 1.6), 2.6, 'set', { team: 'A', touch: 2, pop: 'SET', peak: 3.2 }),
+    C(t0 + 3.8, A(x, 2.6), 3.2, 'attack', { team: 'A', touch: 3, pop: 'BACK-ROW ATTACK', popDx: -90, peak: .3 }),
+    C(t0 + 4.25, B(5.0, -1.0), 0, 'land', { peak: .5 }),
+    C(t0 + 4.8, B(7.6, -1.5), 0, 'bounce'),
+  ];
+  const d1 = mk(0, 3.7, true), d2 = mk(6.6, 2.3, false);
+  addScene({
+    dur: 26,
+    caps: [
+      [0.3, 'Back-row players *can* attack — like this *back-row attack* by the opposite — but she must take off from *behind the 3 m line*.'],
+      [5.0, 'Landing in front of the line afterwards is fine. Now watch where she takes off this time...'],
+      [10.3, '*Fault!* She took off in front of the line and hit the ball above the net. Point to Team B.'],
+      [13.4, 'Other common faults — each one gives *a point to the other team*:'],
+    ],
+    sfx: contactsSfx(d1, t => t).concat(contactsSfx(d2, t => t), [[10.75, 'whistle']]),
+    draw(t) {
+      header('10', 'Back-row attacks & faults', null, clamp(t / .5));
+      drawCourt();
+      teamLabels(1);
+      // attack line glow
+      const ga = fadeWin(t, .3, 13);
+      ctx.save(); ctx.globalAlpha = ga * (.5 + .5 * Math.sin(NOW * 4) ** 2); ctx.strokeStyle = ACCENT; ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.moveTo(px(-3), py(-4.5)); ctx.lineTo(px(-3), py(4.5)); ctx.stroke(); ctx.restore();
+      // take-off markers
+      const m1 = fadeWin(t, 3.6, 6.4), m2 = fadeWin(t, 10.2, 13.2);
+      for (const [x, a, col, txt] of [[3.7, m1, GOOD, '✓ took off behind the line'], [2.3, m2, BAD, '✕ took off in front']]) {
+        if (a <= 0) continue;
+        const [X, Y] = A(x, 2.6);
+        ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.setLineDash([8, 6]);
+        ctx.beginPath(); ctx.ellipse(px(X), py(Y) + 6, 34, 18, 0, 0, 7); ctx.stroke(); ctx.restore();
+        labelAt(txt, px(X), py(Y) + 62, { alpha: a, size: 22, weight: 800, color: col, bg: '#0b1220' });
+      }
+      drawCast(cast, t, { alpha: p => (p.team === 'A' ? 1 : .4), hi: p => p.id === 'aOPP' && t < 12 ? 1 : 0, flag: p => p.id === 'aOPP' ? fadeWin(t, 10.3, 12.5) : 0 });
+      const cs = t < 6.6 ? d1 : d2;
+      drawBall(rallyBall(cs, t), t < 6.6 ? clamp((6.4 - t) / .3) : clamp((13.0 - t) / .3));
+      drawPops(cs, t);
+      if (t > 10.3 && t < 12.8) labelAt('FAULT', px(-4.4), py(-1.6), { alpha: fadeWin(t, 10.3, 12.8), size: 64, weight: 800, color: BAD, stroke: true });
+      const pa = fadeWin(t, 0, 13.2), fa = fadeWin(t, 13.2, 99);
+      panelList('Back-row rules', [
+        { t: .6, text: 'Back-row players *can\'t block*' },
+        { t: 1.4, text: 'They may attack from above the net only if they take off *behind the 3 m line*' },
+        { t: 5.2, text: 'Landing past the line is fine' },
+      ], t, { alpha: pa });
+      panelList('Common faults', [
+        { t: 13.6, text: 'Touching the *net* while playing the ball', color: BAD },
+        { t: 15.3, text: 'A whole foot crossing the *centre line*', color: BAD },
+        { t: 17.0, text: '*4 touches*, or one player touching *twice in a row*', color: BAD },
+        { t: 18.7, text: '*Catching* or throwing the ball', color: BAD },
+        { t: 20.4, text: 'Server stepping on the *end line*', color: BAD },
+        { t: 22.1, text: 'Ball *out*, or touching / passing outside the *antenna*', color: BAD },
+        { t: 23.8, text: 'A *back-row* player blocking', color: BAD },
+      ], t, { alpha: fa, size: 25, gap: 14 });
+      caption(this.caps, t);
+    },
+  });
+}
+
+// ---- 11. Recap: who moves where -------------------------------------------------
+{
+  const R1 = { aOPP: 1, aOH2: 2, aMB1: 3, aS: 4, aOH1: 5, aL: 6 };
+  const R2 = {}; for (const [id, n] of Object.entries(R1)) R2[id] = NEXT[n];
+  const SPEC = (id, n) => {
+    const front = n >= 2 && n <= 4, role = META[id][1];
+    if (front) return { OH: A(2.2, -3.2), MB: A(1.3, 0), S: A(1.0, 2.2), OPP: A(2.2, 3.2) }[role];
+    return { OH: A(6.3, -3), L: A(6.3, 0), MB: A(6.3, 0), S: A(6.0, 2.6), OPP: A(6.3, 3) }[role];
+  };
+  const keys = {};
+  for (const id of Object.keys(R1)) keys[id] = [
+    [0, AZ(R1[id])], [1.6, AZ(R1[id])], [3.6, SPEC(id, R1[id])], [6.2, SPEC(id, R1[id])], [7.6, AZ(R1[id])],
+    [8.0, AZ(R1[id])], [9.8, AZ(R2[id])], [10.6, AZ(R2[id])], [12.6, SPEC(id, R2[id])],
+  ];
+  const cast = mkCast(keys);
+  addScene({
+    dur: 23.5, fadeOut: true,
+    caps: [
+      [0.3, 'Recap: when the ball is served, players stand in *rotation order* (zones 1–6)...'],
+      [1.8, '...then everyone switches to her *specialty spot*: OH left, MB middle, S and OPP right, libero in the back middle.'],
+      [6.4, 'After each side-out the team *rotates*, so the starting spots change...'],
+      [10.6, '...but the *specialty spots stay the same*. That\'s the "who moves where" of volleyball.'],
+      [14.6, '*Watching tip:* follow the setter. Wherever she goes, the attack is about to come from there.'],
+    ],
+    draw(t) {
+      header('11', 'Cheat sheet: who moves where', null, clamp(t / .5) * (1 - fadeWin(t, 18.4, 99)));
+      drawCourt({ zones: .18, alpha: 1 - .7 * fadeWin(t, 18.4, 99) });
+      teamLabels(1 - fadeWin(t, 18.4, 99), 'A');
+      // ghost rotation spots
+      const rot = t < 8 ? R1 : R2;
+      const arA = t < 8 ? fadeWin(t, 1.2, 4.6) : fadeWin(t, 10.2, 13.6);
+      for (const id of Object.keys(rot)) {
+        const p = cast.find(q => q.id === id);
+        arrow(AZ(rot[id]), SPEC(id, rot[id]), { alpha: arA * .9, color: ROLE[p.role], dash: true, width: 4, trim: 28 });
+      }
+      const ra = fadeWin(t, 7.8, 10.0);
+      for (const n of [1, 2, 3, 4, 5, 6]) arrow(AZ(n), AZ(NEXT[n]), { alpha: ra * .9, color: ACCENT, width: 4, bend: -22, trim: 34 });
+      drawCast(cast, t, { alpha: () => 1 - fadeWin(t, 18.4, 99), hi: p => p.role === 'S' && t > 14.6 && t < 18.4 ? 1 : 0 });
+      const pa = 1 - fadeWin(t, 18.4, 99);
+      panelList('Specialty spots', [
+        { t: 2.0, text: '*S* — right side of the net, takes touch 2', color: ROLE.S },
+        { t: 2.6, text: '*OH* — attacks left, passes serves', color: ROLE.OH },
+        { t: 3.2, text: '*MB* — middle of the net: block & quick', color: ROLE.MB },
+        { t: 3.8, text: '*OPP* — right side, front or back', color: ROLE.OPP },
+        { t: 4.4, text: '*L* — back row middle: dig & pass', color: ROLE.L },
+        { t: 7.0, text: 'Side-out → rotate *clockwise*' },
+        { t: 14.8, text: 'Follow the *setter*!' },
+      ], t, { alpha: pa, size: 26, gap: 18 });
+      if (t < 18.4) caption(this.caps, t);
+      const ea = fadeWin(t, 18.6, 99, .6);
+      if (ea > 0) {
+        ctx.save(); ctx.globalAlpha = ea * .75; ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H); ctx.restore();
+        bigCenterText([
+          ["That's volleyball.", 96, INK, -40],
+          ['6 players  ·  3 touches  ·  25 points, win by 2  ·  rotate on a side-out', 34, ACCENT, 70],
+          ['Enjoy the next match!', 30, MUTED, 140],
+        ], ea);
+      }
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Timeline
+// ---------------------------------------------------------------------------
+let acc = 0;
+for (const s of scenes) { s.start = acc; acc += s.dur; }
+const DURATION = acc;
+const SFX = [];
+for (const s of scenes) for (const [t, type] of s.sfx) SFX.push([+(s.start + t).toFixed(3), type]);
+SFX.sort((a, b) => a[0] - b[0]);
+
+function renderAt(T) {
+  NOW = T;
+  const sc = scenes.find(s => T >= s.start && T < s.start + s.dur) || scenes[scenes.length - 1];
+  const t = T - sc.start;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0d1628'); g.addColorStop(1, '#090f1c');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.save(); sc.draw(t); ctx.restore();
+  let f = 0;
+  if (sc.fadeIn !== false && t < .4) f = 1 - t / .4;
+  if (sc.fadeOut !== false && t > sc.dur - .4) f = Math.max(f, (t - (sc.dur - .4)) / .4);
+  if (sc === scenes[0] && t < .4) f = 0;
+  if (f > 0) { ctx.fillStyle = `rgba(9,15,28,${f})`; ctx.fillRect(0, 0, W, H); }
+  // progress bar
+  ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(0, H - 6, W, 6);
+  ctx.fillStyle = ACCENT; ctx.fillRect(0, H - 6, W * T / DURATION, 6);
+}
+window.renderAt = renderAt; window.DURATION = DURATION; window.SFX = SFX;
+
+// ---------------------------------------------------------------------------
+// Interactive player (ignored when rendering to video)
+// ---------------------------------------------------------------------------
+if (new URLSearchParams(location.search).has('render')) {
+  document.body.classList.add('render');
+} else {
+  const btn = document.getElementById('play'), seek = document.getElementById('seek'), tl = document.getElementById('time');
+  let playing = false, T = 0, last = 0;
+  const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const show = () => { renderAt(T); seek.value = Math.round(T / DURATION * 1000); tl.textContent = `${fmt(T)} / ${fmt(DURATION)}`; };
+  const loop = now => { if (!playing) return; T = Math.min(DURATION, T + (now - last) / 1000); last = now; show(); if (T >= DURATION) { playing = false; btn.textContent = 'Replay'; } else requestAnimationFrame(loop); };
+  btn.onclick = () => { if (T >= DURATION) T = 0; playing = !playing; btn.textContent = playing ? 'Pause' : 'Play'; last = performance.now(); if (playing) requestAnimationFrame(loop); };
+  seek.oninput = () => { T = seek.value / 1000 * DURATION; show(); };
+  document.fonts.ready.then(show);
+}
+</script>
+</body>
+</html>
